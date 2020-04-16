@@ -1,0 +1,441 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.2.4
+  creationTimestamp: null
+  name: queues.applicationintegration.aws.crossplane.io
+spec:
+  additionalPrinterColumns:
+  - JSONPath: .status.conditions[?(@.type=='Ready')].status
+    name: READY
+    type: string
+  - JSONPath: .status.conditions[?(@.type=='Synced')].status
+    name: SYNCED
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: AGE
+    type: date
+  group: applicationintegration.aws.crossplane.io
+  names:
+    kind: Queue
+    listKind: QueueList
+    plural: queues
+    singular: queue
+  scope: Cluster
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      description: A Queue is a managed resource that represents a AWS Simple Queue
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: QueueSpec defines the desired state of a Queue.
+          properties:
+            claimRef:
+              description: ClaimReference specifies the resource claim to which this
+                managed resource will be bound. ClaimReference is set automatically
+                during dynamic provisioning. Crossplane does not currently support
+                setting this field manually, per https://github.com/crossplane/crossplane-runtime/issues/19
+              properties:
+                apiVersion:
+                  description: API version of the referent.
+                  type: string
+                fieldPath:
+                  description: 'If referring to a piece of an object instead of an
+                    entire object, this string should contain a valid JSON/Go field
+                    access statement, such as desiredState.manifest.containers[2].
+                    For example, if the object reference is to a container within
+                    a pod, this would take on a value like: "spec.containers{name}"
+                    (where "name" refers to the name of the container that triggered
+                    the event) or if no container name is specified "spec.containers[2]"
+                    (container with index 2 in this pod). This syntax is chosen only
+                    to have some well-defined way of referencing a part of an object.
+                    TODO: this design is not final and this field is subject to change
+                    in the future.'
+                  type: string
+                kind:
+                  description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+                  type: string
+                name:
+                  description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
+                  type: string
+                namespace:
+                  description: 'Namespace of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/'
+                  type: string
+                resourceVersion:
+                  description: 'Specific resourceVersion to which this reference is
+                    made, if any. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency'
+                  type: string
+                uid:
+                  description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
+                  type: string
+              type: object
+            classRef:
+              description: ClassReference specifies the resource class that was used
+                to dynamically provision this managed resource, if any. Crossplane
+                does not currently support setting this field manually, per https://github.com/crossplane/crossplane-runtime/issues/20
+              properties:
+                apiVersion:
+                  description: API version of the referent.
+                  type: string
+                fieldPath:
+                  description: 'If referring to a piece of an object instead of an
+                    entire object, this string should contain a valid JSON/Go field
+                    access statement, such as desiredState.manifest.containers[2].
+                    For example, if the object reference is to a container within
+                    a pod, this would take on a value like: "spec.containers{name}"
+                    (where "name" refers to the name of the container that triggered
+                    the event) or if no container name is specified "spec.containers[2]"
+                    (container with index 2 in this pod). This syntax is chosen only
+                    to have some well-defined way of referencing a part of an object.
+                    TODO: this design is not final and this field is subject to change
+                    in the future.'
+                  type: string
+                kind:
+                  description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+                  type: string
+                name:
+                  description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
+                  type: string
+                namespace:
+                  description: 'Namespace of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/'
+                  type: string
+                resourceVersion:
+                  description: 'Specific resourceVersion to which this reference is
+                    made, if any. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency'
+                  type: string
+                uid:
+                  description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
+                  type: string
+              type: object
+            forProvider:
+              description: QueueParameters define the desired state of an AWS Queue
+              properties:
+                attributes:
+                  description: Queue attributes with their corresponding values.
+                  properties:
+                    delaySeconds:
+                      description: 'The length of time, in seconds, for which the
+                        delivery of all messages in the queue is delayed. Valid values:
+                        An integer from 0 to 900 seconds (15 minutes)'
+                      type: integer
+                    kmsDataKeyReusePeriodSeconds:
+                      description: 'The length of time, in seconds, for which Amazon
+                        SQS can reuse a data key (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#data-keys)
+                        to encrypt or decrypt messages before calling AWS KMS again.
+                        An integer representing seconds, between 60 seconds (1 minute)
+                        and 86,400 seconds (24 hours). Default: 300 (5 minutes).'
+                      type: integer
+                    kmsMasterKeyID:
+                      description: The ID of an AWS-managed customer master key (CMK)
+                        for Amazon SQS or a custom CMK. For more information, see
+                        Key Terms (https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-server-side-encryption.html#sqs-sse-key-terms).
+                        While the alias of the AWS-managed CMK for Amazon SQS is always
+                        alias/aws/sqs, the alias of a custom CMK can, for example,
+                        be alias/MyAlias . For more examples, see KeyId (https://docs.aws.amazon.com/kms/latest/APIReference/API_DescribeKey.html#API_DescribeKey_RequestParameters)
+                        in the AWS Key Management Service API Reference.
+                      type: string
+                    maximumMessageSize:
+                      description: 'The limit of how many bytes a message can contain
+                        before Amazon SQS rejects it. Valid values: An integer from
+                        1,024 bytes (1 KiB) to 262,144 bytes (256 KiB). Default: 262,144
+                        (256 KiB).'
+                      type: integer
+                    messageRetentionPeriod:
+                      description: 'The length of time, in seconds, for which Amazon
+                        SQS retains a message. Valid values: An integer from 60 seconds
+                        (1 minute) to 1,209,600 seconds (14 days). Default: 345,600
+                        (4 days).'
+                      type: integer
+                    receiveMessageWaitTimeSeconds:
+                      description: 'The length of time, in seconds, for which a ReceiveMessage
+                        action waits for a message to arrive. Valid values: An integer
+                        from 0 to 20 (seconds). Default: 0.'
+                      type: integer
+                    redrivePolicy:
+                      description: RedrivePolicy includes the parameters for the dead-letter
+                        queue functionality of the source queue.
+                      properties:
+                        deadLetterQueueARN:
+                          type: string
+                        maxReceiveCount:
+                          type: integer
+                      type: object
+                    visibilityTimeout:
+                      description: 'The visibility timeout for the queue, in seconds.
+                        Valid values: An integer from 0 to 43,200 (12 hours). Default:
+                        30. For more information about the visibility timeout, see
+                        Visibility Timeout (https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html)
+                        in the Amazon Simple Queue Service Developer Guide.'
+                      type: integer
+                  type: object
+                fifoQueue:
+                  description: 'Designates a queue as FIFO. Valid values: true, false.
+                    If you don''t specify the FifoQueue attribute, Amazon SQS creates
+                    a standard queue. You can provide this attribute only during queue
+                    creation. You can''t change it for an existing queue.'
+                  type: boolean
+                name:
+                  description: Name of the queue. A queue name can have up to 80 characters,
+                    a combination of alphanumeric characters, hyphens(-), and underscores(_).
+                    A FIFO queue name must end with the .fifo suffix.
+                  type: string
+                tags:
+                  description: Tags add cost allocation tags to the specified Amazon
+                    SQS queue. For an overview, see Tagging Your Amazon SQS Queues
+                    (https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-queue-tags.html)
+                    in the Amazon Simple Queue Service Developer Guide.
+                  items:
+                    description: Tag add cost allocation tags to the specified Amazon
+                      SQS queue. For an overview, see Tagging Your Amazon SQS Queues
+                      (https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-queue-tags.html)
+                      in the Amazon Simple Queue Service Developer Guide.
+                    properties:
+                      key:
+                        description: The key name that can be used to look up or retrieve
+                          the associated value. For example, Department or Cost Center
+                          are common choices.
+                        type: string
+                      value:
+                        description: "When you use queue tags, keep the following
+                          guidelines in mind: \n    * Adding more than 50 tags to
+                          a queue isn't recommended. \n    * Tags don't have any semantic
+                          meaning. Amazon SQS interprets tags as    character strings.
+                          \n    * Tags are case-sensitive. \n    * A new tag with
+                          a key identical to that of an existing tag overwrites    the
+                          existing tag. \n For a full list of tag restrictions, see
+                          Limits Related to Queues (https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-limits.html#limits-queues)
+                          in the Amazon Simple Queue Service Developer Guide. \n To
+                          be able to tag a queue on creation, you must have the sqs:CreateQueue
+                          and sqs:TagQueue permissions. \n Cross-account permissions
+                          don't apply to this action. For more information, see Grant
+                          Cross-Account Permissions to a Role and a User Name (https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-customer-managed-policy-examples.html#grant-cross-account-permissions-to-role-and-user-name)
+                          in the Amazon Simple Queue Service Developer Guide."
+                        type: string
+                    required:
+                    - key
+                    type: object
+                  type: array
+              type: object
+            providerRef:
+              description: ProviderReference specifies the provider that will be used
+                to create, observe, update, and delete this managed resource.
+              properties:
+                apiVersion:
+                  description: API version of the referent.
+                  type: string
+                fieldPath:
+                  description: 'If referring to a piece of an object instead of an
+                    entire object, this string should contain a valid JSON/Go field
+                    access statement, such as desiredState.manifest.containers[2].
+                    For example, if the object reference is to a container within
+                    a pod, this would take on a value like: "spec.containers{name}"
+                    (where "name" refers to the name of the container that triggered
+                    the event) or if no container name is specified "spec.containers[2]"
+                    (container with index 2 in this pod). This syntax is chosen only
+                    to have some well-defined way of referencing a part of an object.
+                    TODO: this design is not final and this field is subject to change
+                    in the future.'
+                  type: string
+                kind:
+                  description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+                  type: string
+                name:
+                  description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
+                  type: string
+                namespace:
+                  description: 'Namespace of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/'
+                  type: string
+                resourceVersion:
+                  description: 'Specific resourceVersion to which this reference is
+                    made, if any. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency'
+                  type: string
+                uid:
+                  description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
+                  type: string
+              type: object
+            reclaimPolicy:
+              description: ReclaimPolicy specifies what will happen to this managed
+                resource when its resource claim is deleted, and what will happen
+                to the underlying external resource when the managed resource is deleted.
+                The "Delete" policy causes the managed resource to be deleted when
+                its bound resource claim is deleted, and in turn causes the external
+                resource to be deleted when its managed resource is deleted. The "Retain"
+                policy causes the managed resource to be retained, in binding phase
+                "Released", when its resource claim is deleted, and in turn causes
+                the external resource to be retained when its managed resource is
+                deleted. The "Retain" policy is used when no policy is specified.
+              enum:
+              - Retain
+              - Delete
+              type: string
+            writeConnectionSecretToRef:
+              description: WriteConnectionSecretToReference specifies the namespace
+                and name of a Secret to which any connection details for this managed
+                resource should be written. Connection details frequently include
+                the endpoint, username, and password required to connect to the managed
+                resource.
+              properties:
+                name:
+                  description: Name of the secret.
+                  type: string
+                namespace:
+                  description: Namespace of the secret.
+                  type: string
+              required:
+              - name
+              - namespace
+              type: object
+          required:
+          - forProvider
+          - providerRef
+          type: object
+        status:
+          description: QueueStatus represents the observed state of a Queue.
+          properties:
+            atProvider:
+              description: QueueObservation is the representation of the current state
+                that is observed
+              properties:
+                attributes:
+                  description: Queue attributes with their corresponding values.
+                  properties:
+                    delaySeconds:
+                      description: 'The length of time, in seconds, for which the
+                        delivery of all messages in the queue is delayed. Valid values:
+                        An integer from 0 to 900 seconds (15 minutes)'
+                      type: integer
+                    kmsDataKeyReusePeriodSeconds:
+                      description: 'The length of time, in seconds, for which Amazon
+                        SQS can reuse a data key (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#data-keys)
+                        to encrypt or decrypt messages before calling AWS KMS again.
+                        An integer representing seconds, between 60 seconds (1 minute)
+                        and 86,400 seconds (24 hours). Default: 300 (5 minutes).'
+                      type: integer
+                    kmsMasterKeyID:
+                      description: The ID of an AWS-managed customer master key (CMK)
+                        for Amazon SQS or a custom CMK. For more information, see
+                        Key Terms (https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-server-side-encryption.html#sqs-sse-key-terms).
+                        While the alias of the AWS-managed CMK for Amazon SQS is always
+                        alias/aws/sqs, the alias of a custom CMK can, for example,
+                        be alias/MyAlias . For more examples, see KeyId (https://docs.aws.amazon.com/kms/latest/APIReference/API_DescribeKey.html#API_DescribeKey_RequestParameters)
+                        in the AWS Key Management Service API Reference.
+                      type: string
+                    maximumMessageSize:
+                      description: 'The limit of how many bytes a message can contain
+                        before Amazon SQS rejects it. Valid values: An integer from
+                        1,024 bytes (1 KiB) to 262,144 bytes (256 KiB). Default: 262,144
+                        (256 KiB).'
+                      type: integer
+                    messageRetentionPeriod:
+                      description: 'The length of time, in seconds, for which Amazon
+                        SQS retains a message. Valid values: An integer from 60 seconds
+                        (1 minute) to 1,209,600 seconds (14 days). Default: 345,600
+                        (4 days).'
+                      type: integer
+                    receiveMessageWaitTimeSeconds:
+                      description: 'The length of time, in seconds, for which a ReceiveMessage
+                        action waits for a message to arrive. Valid values: An integer
+                        from 0 to 20 (seconds). Default: 0.'
+                      type: integer
+                    redrivePolicy:
+                      description: RedrivePolicy includes the parameters for the dead-letter
+                        queue functionality of the source queue.
+                      properties:
+                        deadLetterQueueARN:
+                          type: string
+                        maxReceiveCount:
+                          type: integer
+                      type: object
+                    visibilityTimeout:
+                      description: 'The visibility timeout for the queue, in seconds.
+                        Valid values: An integer from 0 to 43,200 (12 hours). Default:
+                        30. For more information about the visibility timeout, see
+                        Visibility Timeout (https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html)
+                        in the Amazon Simple Queue Service Developer Guide.'
+                      type: integer
+                  type: object
+                fifoQueue:
+                  description: Designates a queue as FIFO. If user doesn't specify
+                    the FifoQueue attribute, Amazon SQS creates a standard queue.
+                    You can provide this attribute only during queue creation. You
+                    can't change it for an existing queue.
+                  type: boolean
+              type: object
+            bindingPhase:
+              description: Phase represents the binding phase of a managed resource
+                or claim. Unbindable resources cannot be bound, typically because
+                they are currently unavailable, or still being created. Unbound resource
+                are available for binding, and Bound resources have successfully bound
+                to another resource.
+              enum:
+              - Unbindable
+              - Unbound
+              - Bound
+              - Released
+              type: string
+            conditions:
+              description: Conditions of the resource.
+              items:
+                description: A Condition that may apply to a resource.
+                properties:
+                  lastTransitionTime:
+                    description: LastTransitionTime is the last time this condition
+                      transitioned from one status to another.
+                    format: date-time
+                    type: string
+                  message:
+                    description: A Message containing details about this condition's
+                      last transition from one status to another, if any.
+                    type: string
+                  reason:
+                    description: A Reason for this condition's last transition from
+                      one status to another.
+                    type: string
+                  status:
+                    description: Status of this condition; is it currently True, False,
+                      or Unknown?
+                    type: string
+                  type:
+                    description: Type of this condition. At most one of each condition
+                      type may apply to a resource at any point in time.
+                    type: string
+                required:
+                - lastTransitionTime
+                - reason
+                - status
+                - type
+                type: object
+              type: array
+          required:
+          - atProvider
+          type: object
+      required:
+      - spec
+      type: object
+  version: v1alpha1
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
