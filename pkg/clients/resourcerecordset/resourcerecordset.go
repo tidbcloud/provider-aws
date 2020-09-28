@@ -108,10 +108,12 @@ func GenerateChangeResourceRecordSetsInput(name string, p v1alpha1.ResourceRecor
 		Region:                  route53.ResourceRecordSetRegion(p.Region),
 		TrafficPolicyInstanceId: p.TrafficPolicyInstanceID,
 	}
-	r.ResourceRecords = make([]route53.ResourceRecord, len(p.ResourceRecords))
-	for i, v := range p.ResourceRecords {
-		r.ResourceRecords[i] = route53.ResourceRecord{
-			Value: aws.String(v.Value),
+	if len(p.ResourceRecords) > 0 {
+		r.ResourceRecords = make([]route53.ResourceRecord, len(p.ResourceRecords))
+		for i, v := range p.ResourceRecords {
+			r.ResourceRecords[i] = route53.ResourceRecord{
+				Value: aws.String(v.Value),
+			}
 		}
 	}
 	if p.AliasTarget != nil {
