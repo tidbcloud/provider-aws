@@ -185,6 +185,22 @@ spec:
             region:
               description: Region of the bucket.
               type: string
+            tags:
+              description: Tags is a collection of Tag.
+              items:
+                description: Tag is a key value name pair.
+                properties:
+                  name:
+                    description: Name is a tag name.
+                    type: string
+                  value:
+                    description: Value is a required field
+                    type: string
+                required:
+                - name
+                - value
+                type: object
+              type: array
             versioning:
               description: Versioning enables versioning of objects stored in this
                 bucket.
@@ -210,6 +226,7 @@ spec:
           - localPermission
           - providerRef
           - region
+          - tags
           type: object
         status:
           description: S3BucketStatus defines the observed state of S3Bucket

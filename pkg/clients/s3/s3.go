@@ -76,7 +76,75 @@ func (c *Client) CreateOrUpdateBucket(bucket *v1alpha3.S3Bucket) error {
 		if isErrorAlreadyExists(err) {
 			return c.UpdateBucketACL(bucket)
 		}
+	} else {
+		if err = c.appendTags(bucket); err != nil {
+			return err
+		}
+
+		if err = c.encryptBucket(bucket); err != nil {
+			return err
+		}
+
+		if err = c.publicAccessBlock(bucket); err != nil {
+			return err
+		}
 	}
+	return err
+}
+
+func (c *Client) appendTags(bucket *v1alpha3.S3Bucket) error {
+	if len(bucket.Spec.Tags) == 0 {
+		return nil
+	}
+
+	tags := make([]s3.Tag, len(bucket.Spec.Tags))
+	for i, t := range bucket.Spec.Tags {
+		tags[i] = s3.Tag{
+			Key:   t.Name,
+			Value: t.Value,
+		}
+	}
+
+	tagInput := &s3.PutBucketTaggingInput{
+		Bucket: aws.String(meta.GetExternalName(bucket)),
+		Tagging: &s3.Tagging{
+			TagSet: tags,
+		},
+	}
+	_, err := c.s3.PutBucketTaggingRequest(tagInput).Send(context.TODO())
+	return err
+}
+
+func (c *Client) encryptBucket(bucket *v1alpha3.S3Bucket) error {
+	encryptionInput := &s3.PutBucketEncryptionInput{
+		Bucket: aws.String(meta.GetExternalName(bucket)),
+		ServerSideEncryptionConfiguration: &s3.ServerSideEncryptionConfiguration{
+			Rules: []s3.ServerSideEncryptionRule{
+				{
+					ApplyServerSideEncryptionByDefault: &s3.ServerSideEncryptionByDefault{
+						SSEAlgorithm: s3.ServerSideEncryptionAes256,
+					},
+				},
+			},
+		},
+	}
+
+	_, err := c.s3.PutBucketEncryptionRequest(encryptionInput).Send(context.TODO())
+	return err
+}
+
+func (c *Client) publicAccessBlock(bucket *v1alpha3.S3Bucket) error {
+	putPublicAccessBlockInput := &s3.PutPublicAccessBlockInput{
+		Bucket: aws.String(meta.GetExternalName(bucket)),
+		PublicAccessBlockConfiguration: &s3.PublicAccessBlockConfiguration{
+			BlockPublicAcls:       aws.Bool(true),
+			BlockPublicPolicy:     aws.Bool(true),
+			IgnorePublicAcls:      aws.Bool(true),
+			RestrictPublicBuckets: aws.Bool(true),
+		},
+	}
+
+	_, err := c.s3.PutPublicAccessBlockRequest(putPublicAccessBlockInput).Send(context.TODO())
 	return err
 }
 
@@ -127,6 +195,10 @@ func (c *Client) UpdateBucketACL(bucket *v1alpha3.S3Bucket) error {
 	if bucket.Spec.CannedACL == nil {
 		return nil
 	}
+	if *bucket.Spec.CannedACL == "" {
+		return nil
+	}
+
 	input := &s3.PutBucketAclInput{
 		ACL:    *bucket.Spec.CannedACL,
 		Bucket: aws.String(meta.GetExternalName(bucket)),

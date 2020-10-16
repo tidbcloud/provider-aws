@@ -92,3 +92,48 @@ func (_m *Operations) PutBucketVersioningRequest(_a0 *s3.PutBucketVersioningInpu
 
 	return r0
 }
+
+func (_m *Operations) PutBucketTaggingRequest(_a0 *s3.PutBucketTaggingInput) operations.PutBucketTaggingRequest {
+	ret := _m.Called(_a0)
+
+	var r0 operations.PutBucketTaggingRequest
+	if rf, ok := ret.Get(0).(func(input *s3.PutBucketTaggingInput) operations.PutBucketTaggingRequest); ok {
+		r0 = rf(_a0)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(operations.PutBucketTaggingRequest)
+		}
+	}
+
+	return r0
+}
+
+func (_m *Operations) PutBucketEncryptionRequest(_a0 *s3.PutBucketEncryptionInput) operations.PutBucketEncryptionRequest {
+	ret := _m.Called(_a0)
+
+	var r0 operations.PutBucketEncryptionRequest
+	if rf, ok := ret.Get(0).(func(input *s3.PutBucketEncryptionInput) operations.PutBucketEncryptionRequest); ok {
+		r0 = rf(_a0)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(operations.PutBucketEncryptionRequest)
+		}
+	}
+
+	return r0
+}
+
+func (_m *Operations) PutPublicAccessBlockRequest(_a0 *s3.PutPublicAccessBlockInput) operations.PutPublicAccessBlockRequest {
+	ret := _m.Called(_a0)
+
+	var r0 operations.PutPublicAccessBlockRequest
+	if rf, ok := ret.Get(0).(func(input *s3.PutPublicAccessBlockInput) operations.PutPublicAccessBlockRequest); ok {
+		r0 = rf(_a0)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(operations.PutPublicAccessBlockRequest)
+		}
+	}
+
+	return r0
+}

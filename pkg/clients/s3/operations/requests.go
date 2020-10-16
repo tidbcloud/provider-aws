@@ -48,3 +48,18 @@ type PutBucketVersioningRequest interface {
 type DeleteBucketRequest interface {
 	Send(context.Context) (*s3.DeleteBucketResponse, error)
 }
+
+// PutBucketTaggingRequest is a API request type for the PutTag API operation.
+type PutBucketTaggingRequest interface {
+	Send(ctx context.Context) (*s3.PutBucketTaggingResponse, error)
+}
+
+// PutBucketEncryptionRequest is a API request type for EncryptBucket API operation.
+type PutBucketEncryptionRequest interface {
+	Send(ctx context.Context) (*s3.PutBucketEncryptionResponse, error)
+}
+
+// PutPublicAccessBlockRequest is a API request type for PublicAcessBucket API operation.
+type PutPublicAccessBlockRequest interface {
+	Send(ctx context.Context) (*s3.PutPublicAccessBlockResponse, error)
+}
