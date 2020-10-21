@@ -55,3 +55,19 @@ func (api *S3Operations) DeleteBucketRequest(i *s3.DeleteBucketInput) DeleteBuck
 func (api *S3Operations) CreateBucketRequest(i *s3.CreateBucketInput) CreateBucketRequest {
 	return api.s3.CreateBucketRequest(i)
 }
+
+// PutBucketTaggingRequest puts a tag for bucket.
+func (api *S3Operations) PutBucketTaggingRequest(i *s3.PutBucketTaggingInput) PutBucketTaggingRequest {
+
+	return api.s3.PutBucketTaggingRequest(i)
+}
+
+// PutBucketEncryptionRequest encrypt bucket.
+func (api *S3Operations) PutBucketEncryptionRequest(i *s3.PutBucketEncryptionInput) PutBucketEncryptionRequest {
+	return api.s3.PutBucketEncryptionRequest(i)
+}
+
+// PutPublicAccessBlockRequest set access policy for bucket.
+func (api *S3Operations) PutPublicAccessBlockRequest(i *s3.PutPublicAccessBlockInput) PutPublicAccessBlockRequest {
+	return api.s3.PutPublicAccessBlockRequest(i)
+}

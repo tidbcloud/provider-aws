@@ -51,6 +51,18 @@ type S3BucketParameters struct {
 	// provisioning.
 	// +kubebuilder:validation:Enum=Read;Write;ReadWrite
 	LocalPermission *storagev1alpha1.LocalPermissionType `json:"localPermission"`
+
+	// Tags is a collection of Tag.
+	Tags []Tag `json:"tags"`
+}
+
+// Tag is a key value name pair.
+type Tag struct {
+	// Name is a tag name.
+	Name *string `json:"name"`
+
+	// Value is a required field
+	Value *string `json:"value"`
 }
 
 // S3BucketSpec defines the desired state of S3Bucket

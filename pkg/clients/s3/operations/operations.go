@@ -26,4 +26,7 @@ type Operations interface {
 	PutBucketACLRequest(*s3.PutBucketAclInput) PutBucketACLRequest
 	PutBucketVersioningRequest(*s3.PutBucketVersioningInput) PutBucketVersioningRequest
 	DeleteBucketRequest(*s3.DeleteBucketInput) DeleteBucketRequest
+	PutBucketTaggingRequest(i *s3.PutBucketTaggingInput) PutBucketTaggingRequest
+	PutBucketEncryptionRequest(i *s3.PutBucketEncryptionInput) PutBucketEncryptionRequest
+	PutPublicAccessBlockRequest(i *s3.PutPublicAccessBlockInput) PutPublicAccessBlockRequest
 }
