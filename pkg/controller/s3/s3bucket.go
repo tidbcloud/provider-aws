@@ -186,7 +186,7 @@ func (r *Reconciler) _sync(bucket *bucketv1alpha3.S3Bucket, client s3.Service) (
 		}
 	}
 
-	bucket.Status.SetConditions(runtimev1alpha1.ReconcileSuccess())
+	bucket.Status.SetConditions(runtimev1alpha1.ReconcileSuccess(), runtimev1alpha1.Available())
 	return result, r.Update(ctx, bucket)
 }
 
