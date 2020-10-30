@@ -19,7 +19,6 @@ package s3
 import (
 	"context"
 
-	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -149,42 +148,43 @@ func (r *Reconciler) _create(bucket *bucketv1alpha3.S3Bucket, client s3.Service)
 }
 
 func (r *Reconciler) _sync(bucket *bucketv1alpha3.S3Bucket, client s3.Service) (reconcile.Result, error) {
-	if bucket.Spec.IAMUsername == "" {
-		return r.fail(bucket, errors.New("username not set, .Status.IAMUsername"))
-	}
-	bucketInfo, err := client.GetBucketInfo(bucket.Spec.IAMUsername, bucket)
-	if err != nil {
-		return r.fail(bucket, err)
-	}
-
-	if bucketInfo.Versioning != bucket.Spec.Versioning {
-		err := client.UpdateVersioning(bucket)
-		if err != nil {
-			return r.fail(bucket, err)
-		}
-	}
-
-	// TODO: Detect if the bucket CannedACL has changed, possibly by managing grants list directly.
-	err = client.UpdateBucketACL(bucket)
-	if err != nil {
-		return r.fail(bucket, err)
-	}
-
-	// Eventually consistent, so we check if this version is newer than our stored version.
-	changed, err := bucket.HasPolicyChanged(bucketInfo.UserPolicyVersion)
-	if err != nil {
-		return r.fail(bucket, err)
-	}
-	if changed {
-		currentVersion, err := client.UpdatePolicyDocument(bucket.Spec.IAMUsername, bucket)
-		if err != nil {
-			return r.fail(bucket, err)
-		}
-		err = bucket.SetUserPolicyVersion(currentVersion)
-		if err != nil {
-			return r.fail(bucket, err)
-		}
-	}
+	// TODO: do not update operator
+	//if bucket.Spec.IAMUsername == "" {
+	//	return r.fail(bucket, errors.New("username not set, .Status.IAMUsername"))
+	//}
+	//bucketInfo, err := client.GetBucketInfo(bucket.Spec.IAMUsername, bucket)
+	//if err != nil {
+	//	return r.fail(bucket, err)
+	//}
+	//
+	//if bucketInfo.Versioning != bucket.Spec.Versioning {
+	//	err := client.UpdateVersioning(bucket)
+	//	if err != nil {
+	//		return r.fail(bucket, err)
+	//	}
+	//}
+	//
+	//// TODO: Detect if the bucket CannedACL has changed, possibly by managing grants list directly.
+	//err = client.UpdateBucketACL(bucket)
+	//if err != nil {
+	//	return r.fail(bucket, err)
+	//}
+	//
+	//// Eventually consistent, so we check if this version is newer than our stored version.
+	//changed, err := bucket.HasPolicyChanged(bucketInfo.UserPolicyVersion)
+	//if err != nil {
+	//	return r.fail(bucket, err)
+	//}
+	//if changed {
+	//	currentVersion, err := client.UpdatePolicyDocument(bucket.Spec.IAMUsername, bucket)
+	//	if err != nil {
+	//		return r.fail(bucket, err)
+	//	}
+	//	err = bucket.SetUserPolicyVersion(currentVersion)
+	//	if err != nil {
+	//		return r.fail(bucket, err)
+	//	}
+	//}
 
 	bucket.Status.SetConditions(runtimev1alpha1.ReconcileSuccess(), runtimev1alpha1.Available())
 	return result, r.Update(ctx, bucket)
