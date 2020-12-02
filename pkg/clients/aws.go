@@ -27,9 +27,14 @@ import (
 	"strconv"
 	"time"
 
+	aws2 "github.com/aws/aws-sdk-go/aws"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/external"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+
+	"github.com/aws/aws-sdk-go/aws/session"
+
 	jsonpatch "github.com/evanphx/json-patch"
 	"github.com/go-ini/ini"
 	"github.com/pkg/errors"
@@ -91,9 +96,33 @@ type AuthMethod func(context.Context, []byte, string, string) (*aws.Config, erro
 
 // UseProviderSecret - AWS configuration which can be used to issue requests against AWS API
 func UseProviderSecret(_ context.Context, data []byte, profile, region string) (*aws.Config, error) {
-	creds, err := CredentialsIDSecret(data, profile)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot parse credentials secret")
+	var creds aws.Credentials
+	if len(data) == 0 {
+		sess, err := session.NewSession(&aws2.Config{
+			Region: &region,
+		})
+
+		if err != nil {
+			return nil, errors.Wrap(err, "request ec2medata failed")
+		}
+
+		v, err := sess.Config.Credentials.Get()
+		if err != nil {
+			return nil, errors.Wrap(err, "request ec2medata failed")
+		}
+
+		creds = aws.Credentials{
+			AccessKeyID:     v.AccessKeyID,
+			SecretAccessKey: v.SecretAccessKey,
+			SessionToken:    v.SessionToken,
+		}
+
+	} else {
+		var err error
+		creds, err = CredentialsIDSecret(data, profile)
+		if err != nil {
+			return nil, errors.Wrap(err, "cannot parse credentials secret")
+		}
 	}
 
 	shared := external.SharedConfig{
