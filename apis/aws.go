@@ -20,6 +20,11 @@ package apis
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 
+	ec2v1alpha1 "github.com/crossplane/provider-aws/apis/ec2/v1alpha1"
+	ec2v1beta1 "github.com/crossplane/provider-aws/apis/ec2/v1beta1"
+	elasticloadbalancingv1alpha1 "github.com/crossplane/provider-aws/apis/elasticloadbalancing/v1alpha1"
+	identityv1alpha1 "github.com/crossplane/provider-aws/apis/identity/v1alpha1"
+	identityv1beta1 "github.com/crossplane/provider-aws/apis/identity/v1beta1"
 	kmsv1alpha1 "github.com/crossplane/provider-aws/apis/kms/v1alpha1"
 	route53v1alpha1 "github.com/crossplane/provider-aws/apis/route53/v1alpha1"
 	route53resolveralpha1 "github.com/crossplane/provider-aws/apis/route53resolver/v1alpha1"
@@ -29,12 +34,7 @@ import (
 	transferv1alpha1 "github.com/crossplane/provider-aws/apis/transfer/v1alpha1"
 	awsv1alpha3 "github.com/crossplane/provider-aws/apis/v1alpha3"
 	awsv1beta1 "github.com/crossplane/provider-aws/apis/v1beta1"
-	ec2v1alpha1 "github.com/crossplane/provider-aws/apis/ec2/v1alpha1"
-	ec2v1beta1 "github.com/crossplane/provider-aws/apis/ec2/v1beta1"
-	elasticloadbalancingv1alpha1 "github.com/crossplane/provider-aws/apis/elasticloadbalancing/v1alpha1"
-	identityv1alpha1 "github.com/crossplane/provider-aws/apis/identity/v1alpha1"
-    identityv1beta1 "github.com/crossplane/provider-aws/apis/identity/v1beta1"
-
+	peeringv1alpha1 "github.com/crossplane/provider-aws/apis/vpcpeering/v1alpha1"
 )
 
 func init() {
@@ -69,6 +69,7 @@ func init() {
 		//efsv1alpha1.SchemeBuilder.AddToScheme,
 		//rdsv1alpha1.SchemeBuilder.AddToScheme,
 		ec2v1alpha1.SchemeBuilder.AddToScheme,
+		peeringv1alpha1.SchemeBuilder.AddToScheme,
 		//lambdav1alpha1.SchemeBuilder.AddToScheme,
 	)
 }

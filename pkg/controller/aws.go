@@ -17,8 +17,7 @@ limitations under the License.
 package controller
 
 import (
-	"time"
-
+	"github.com/crossplane/provider-aws/pkg/controller/vpcpeering"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 
@@ -116,6 +115,7 @@ func Setup(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
 		//httpnamespace.SetupHTTPNamespace,
 		//function.SetupFunction,
 		//openidconnectprovider.SetupOpenIDConnectProvider,
+		vpcpeering.SetupVPCPeeringConnection,
 	} {
 		if err := setup(mgr, l, rl, poll); err != nil {
 			return err
