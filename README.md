@@ -2,7 +2,7 @@
 
 ## Overview
 
-This `provider-aws` repository is forked from https://github.com/crossplane/provider-aws.
+This `provider-aws` repository is forked from [crossplane](https://github.com/crossplane/provider-aws).
 We just start some controllers to avoid to apply all CRD.
 Currently, [infra-cd](https://github.com/tidbcloud/infra-cd) apply following crds:
 ```antlrv4
