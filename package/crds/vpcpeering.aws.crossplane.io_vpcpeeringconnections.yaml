@@ -72,6 +72,7 @@ spec:
                   tags:
                     description: The tags to assign to the peering connection.
                     items:
+                      description: Tag represent tag of the resource.
                       properties:
                         key:
                           type: string
@@ -83,7 +84,6 @@ spec:
                     description: The ID of the requester VPC. You must specify this parameter in the request.
                     type: string
                 required:
-                - hostZoneID
                 - region
                 type: object
               providerConfigRef:
@@ -133,6 +133,7 @@ spec:
                         type: string
                       cidrBlockSet:
                         items:
+                          description: CIDRBlock vpc peering cidr block.
                           properties:
                             cidrBlock:
                               type: string
@@ -140,6 +141,7 @@ spec:
                         type: array
                       ipv6CIDRBlockSet:
                         items:
+                          description: IPv6CIDRBlock vpc peering ipv6 cidr block.
                           properties:
                             ipv6CIDRBlock:
                               type: string
@@ -175,6 +177,7 @@ spec:
                         type: string
                       cidrBlockSet:
                         items:
+                          description: CIDRBlock vpc peering cidr block.
                           properties:
                             cidrBlock:
                               type: string
@@ -182,6 +185,7 @@ spec:
                         type: array
                       ipv6CIDRBlockSet:
                         items:
+                          description: IPv6CIDRBlock vpc peering ipv6 cidr block.
                           properties:
                             ipv6CIDRBlock:
                               type: string
@@ -215,6 +219,7 @@ spec:
                   tags:
                     description: Any tags assigned to the resource.
                     items:
+                      description: Tag represent tag of the resource.
                       properties:
                         key:
                           type: string
