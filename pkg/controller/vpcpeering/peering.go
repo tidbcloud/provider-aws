@@ -47,7 +47,6 @@ const (
 	errCreate              = "cannot create VPCPeeringConnection in AWS"
 	errDescribe            = "failed to describe VPCPeeringConnection"
 	errDescribeRouteTable  = "failed to describe RouteTable"
-	errModifyVpcPeering    = "failed to motify VPCPeeringConnection"
 	errUpdateManagedStatus = "cannot update managed resource status"
 )
 
