@@ -2,6 +2,7 @@ package vpcpeering
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -235,6 +236,7 @@ func (e *external) Create(ctx context.Context, mg cpresource.Managed) (managed.E
 			}
 		} else {
 			e.log.Info("Create route for route table", "RouteTableID", *rt.RouteTableId, "return", *createRouteRes.Return)
+			fmt.Println(createRouteRes)
 		}
 	}
 
@@ -395,7 +397,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 	}
 
 	modifyVpcPeeringConnectionOptionsInput := &ec2.ModifyVpcPeeringConnectionOptionsInput{
-		VpcPeeringConnectionId: aws.String(meta.GetExternalName(cr)),
+		VpcPeeringConnectionId: cr.Status.AtProvider.VPCPeeringConnectionID,
 		RequesterPeeringConnectionOptions: &ec2.PeeringConnectionOptionsRequest{
 			AllowDnsResolutionFromRemoteVpc: aws.Bool(true),
 		},
@@ -403,7 +405,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 
 	_, err := e.client.ModifyVpcPeeringConnectionOptionsRequest(modifyVpcPeeringConnectionOptionsInput).Send(ctx)
 	if err != nil {
-		return managed.ExternalUpdate{}, errors.New(errModifyVpcPeering)
+		return managed.ExternalUpdate{}, err
 	}
 
 	vpcAssociationAuthorizationInput := &route53.CreateVPCAssociationAuthorizationInput{
@@ -416,7 +418,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 	_, err = e.route53Client.CreateVPCAssociationAuthorizationRequest(vpcAssociationAuthorizationInput).Send(ctx)
 	if aerr, ok := err.(awserr.Error); ok {
 		if strings.Contains(strings.ToLower(aerr.Code()), "already") {
-			return managed.ExternalUpdate{}, errors.New(errModifyVpcPeering)
+			return managed.ExternalUpdate{}, err
 		}
 	}
 
@@ -439,7 +441,7 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 		},
 	}).Send(ctx)
 	if err != nil {
-		e.log.Info("delete VPCAssociationAuthorization failed", err)
+		e.log.Info("delete VPCAssociationAuthorization failed", "DeleteVPCAuth", err)
 	}
 
 	filter := ec2.Filter{
@@ -459,7 +461,7 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 
 	for _, rt := range routeTablesRes.RouteTables {
 		for _, r := range rt.Routes {
-			if r.VpcPeeringConnectionId != nil && *r.VpcPeeringConnectionId == meta.GetExternalName(cr) {
+			if r.VpcPeeringConnectionId != nil && *r.VpcPeeringConnectionId == *cr.Status.AtProvider.VPCPeeringConnectionID {
 				_, err := e.client.DeleteRouteRequest(&ec2.DeleteRouteInput{
 					DestinationCidrBlock: cr.Spec.ForProvider.PeerCIDR,
 
@@ -473,7 +475,7 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 	}
 
 	_, err = e.client.DeleteVpcPeeringConnectionRequest(&ec2.DeleteVpcPeeringConnectionInput{
-		VpcPeeringConnectionId: aws.String(meta.GetExternalName(cr)),
+		VpcPeeringConnectionId: cr.Status.AtProvider.VPCPeeringConnectionID,
 	}).Send(ctx)
 
 	if err != nil && isAWSErr(err, "InvalidVpcPeeringConnectionID.NotFound", "") {
