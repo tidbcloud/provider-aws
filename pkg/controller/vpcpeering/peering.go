@@ -529,7 +529,7 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 	}
 
 	_, err = e.client.DeleteVpcPeeringConnectionRequest(&ec2.DeleteVpcPeeringConnectionInput{
-		VpcPeeringConnectionId: aws.String(meta.GetExternalName(cr)),
+		VpcPeeringConnectionId: cr.Status.AtProvider.VPCPeeringConnectionID,
 	}).Send(ctx)
 
 	if err != nil && isAWSErr(err, "InvalidVpcPeeringConnectionID.NotFound", "") {
