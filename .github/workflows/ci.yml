@@ -8,12 +8,16 @@ on:
       - pingcap/provider-aws
     tags:
       - "*"
+  # for debugging
+  pull_request:
+    branches:
+      - pingcap/provider-aws
 
 env:
   GO_VERSION: '1.14'
-  GCR_REG: ${{ github.event.inputs.registry }}
+  GCR_REG: gcr.io/pingcap-public/crossplane
   PROJECT_ID: pingcap-public
-  IMAGE_NAME: ${{ github.event.inputs.name }}
+  IMAGE_NAME: provider-aws
   # set the commit id as default value
   IMAGE_TAG: ${{ github.sha }}
 
