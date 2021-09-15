@@ -25,7 +25,7 @@ func GenerateDescribeVpcPeeringConnectionsInput(cr *svcapitypes.VPCPeeringConnec
 				Values: []string{cr.ObjectMeta.Name},
 			},
 			{
-				Name:   aws.String("status-code"),
+				Name: aws.String("status-code"),
 				Values: []string{
 					string(ec2.VpcPeeringConnectionStateReasonCodeInitiatingRequest),
 					string(ec2.VpcPeeringConnectionStateReasonCodeActive),
