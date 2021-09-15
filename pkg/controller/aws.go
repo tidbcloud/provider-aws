@@ -17,6 +17,8 @@ limitations under the License.
 package controller
 
 import (
+	"github.com/crossplane/provider-aws/pkg/controller/eks"
+	"github.com/crossplane/provider-aws/pkg/controller/eks/nodegroup"
 	"github.com/crossplane/provider-aws/pkg/controller/vpcpeering"
 
 	"k8s.io/client-go/util/workqueue"
@@ -57,6 +59,8 @@ func Setup(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
 		queue.SetupQueue,
 		key.SetupKey,
 		vpcpeering.SetupVPCPeeringConnection,
+		eks.SetupCluster,
+		nodegroup.SetupNodeGroup,
 	} {
 		if err := setup(mgr, l, rl); err != nil {
 			return err

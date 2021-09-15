@@ -22,8 +22,10 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awseks "github.com/aws/aws-sdk-go-v2/service/eks"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/pkg/errors"
 	"k8s.io/client-go/util/workqueue"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -89,12 +91,13 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	if err != nil {
 		return nil, err
 	}
-	return &external{client: c.newClientFn(*cfg), sts: c.newSTSClientFn(*cfg), kube: c.kube}, nil
+	return &external{client: c.newClientFn(*cfg), sts: c.newSTSClientFn(*cfg), cfg: cfg, kube: c.kube}, nil
 }
 
 type external struct {
 	client eks.Client
 	sts    eks.STSClient
+	cfg    *aws.Config
 	kube   client.Client
 }
 
@@ -149,7 +152,13 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	if cr.Status.AtProvider.Status == v1beta1.ClusterStatusCreating {
 		return managed.ExternalCreation{}, nil
 	}
-	_, err := e.client.CreateClusterRequest(eks.GenerateCreateClusterInput(meta.GetExternalName(cr), &cr.Spec.ForProvider)).Send(ctx)
+	stsSvc := sts.New(*e.cfg)
+	respp, err := stsSvc.GetCallerIdentityRequest(&sts.GetCallerIdentityInput{}).Send(ctx)
+	if err != nil {
+		return managed.ExternalCreation{}, awsclient.Wrap(err, errCreateFailed)
+	}
+	klog.Infof("CALL EKS API with identity %s, %s", *respp.Account, *respp.Arn)
+	_, err = e.client.CreateClusterRequest(eks.GenerateCreateClusterInput(meta.GetExternalName(cr), &cr.Spec.ForProvider)).Send(ctx)
 	return managed.ExternalCreation{}, awsclient.Wrap(err, errCreateFailed)
 }
 

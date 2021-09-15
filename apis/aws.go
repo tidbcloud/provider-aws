@@ -18,6 +18,8 @@ limitations under the License.
 package apis
 
 import (
+	eksv1beta1 "github.com/crossplane/provider-aws/apis/eks/v1beta1"
+	eksv1alpha1 "github.com/crossplane/provider-aws/apis/eks/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	ec2v1alpha1 "github.com/crossplane/provider-aws/apis/ec2/v1alpha1"
@@ -51,6 +53,8 @@ func init() {
 		kmsv1alpha1.SchemeBuilder.AddToScheme,
 		ec2v1alpha1.SchemeBuilder.AddToScheme,
 		peeringv1alpha1.SchemeBuilder.AddToScheme,
+		eksv1beta1.SchemeBuilder.AddToScheme,
+		eksv1alpha1.SchemeBuilder.AddToScheme,
 	)
 }
 
