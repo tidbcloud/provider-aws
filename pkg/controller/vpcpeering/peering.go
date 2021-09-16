@@ -151,7 +151,21 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 		return managed.ExternalObservation{ResourceExists: false}, awsclient.Wrap(err, errDescribe)
 	}
 
-	if len(resp.VpcPeeringConnections) == 0 {
+	filter := ec2.Filter{
+		Name: aws.String("vpc-id"),
+		Values: []string{
+			*cr.Spec.ForProvider.VPCID,
+		},
+	}
+	describeRouteTablesInput := &ec2.DescribeRouteTablesInput{
+		Filters:    []ec2.Filter{filter},
+		MaxResults: aws.Int64(10),
+	}
+	routeTablesRes, err := e.client.DescribeRouteTablesRequest(describeRouteTablesInput).Send(ctx)
+	if err != nil {
+		return managed.ExternalObservation{ResourceExists: false}, err
+	}
+	if len(routeTablesRes.RouteTables) == 0 && len(resp.VpcPeeringConnections) == 0 {
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
