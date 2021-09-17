@@ -2,6 +2,7 @@ package vpcpeering
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -522,6 +523,7 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 		Filters:    []ec2.Filter{filter},
 		MaxResults: aws.Int64(10),
 	}
+	fmt.Println(describeRouteTablesInput)
 	routeTablesRes, err := e.client.DescribeRouteTablesRequest(describeRouteTablesInput).Send(ctx)
 	if err != nil {
 		return err
