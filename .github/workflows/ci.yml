@@ -57,7 +57,7 @@ jobs:
       - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@master
         with:
-          service_account_key: ${{ secrets.GCR_SA_KEY }}
+          service_account_key: ${{ secrets.PUB_GCR_SA_KEY }}
           project_id: ${{ env.PROJECT_ID }}
           export_default_credentials: true
 
