@@ -73,7 +73,7 @@ func TestObserve(t *testing.T) {
 				},
 			},
 		},
-		"UpToDate": {
+		"Created": {
 			args: args{
 				kube: &test.MockClient{
 					MockUpdate: test.NewMockClient().Update,
@@ -115,8 +115,8 @@ func TestObserve(t *testing.T) {
 			want: want{
 				result: managed.ExternalObservation{
 					ResourceExists:          true,
-					ResourceUpToDate:        true,
-					ResourceLateInitialized: true,
+					ResourceUpToDate:        false,
+					ResourceLateInitialized: false,
 				},
 			},
 		},
@@ -158,7 +158,7 @@ func TestObserve(t *testing.T) {
 				result: managed.ExternalObservation{
 					ResourceExists:          true,
 					ResourceUpToDate:        false,
-					ResourceLateInitialized: true,
+					ResourceLateInitialized: false,
 				},
 			},
 		},
