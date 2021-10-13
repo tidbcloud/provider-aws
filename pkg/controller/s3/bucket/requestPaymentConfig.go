@@ -98,6 +98,7 @@ func (in *RequestPaymentConfigurationClient) LateInitialize(ctx context.Context,
 
 // SubresourceExists checks if the subresource this controller manages currently exists
 func (in *RequestPaymentConfigurationClient) SubresourceExists(bucket *v1beta1.Bucket) bool {
+	// RequestPaymentConfiguration resource is always exist and should be synced to CR
 	return true
 }
 
