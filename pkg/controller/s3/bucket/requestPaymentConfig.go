@@ -98,7 +98,7 @@ func (in *RequestPaymentConfigurationClient) LateInitialize(ctx context.Context,
 
 // SubresourceExists checks if the subresource this controller manages currently exists
 func (in *RequestPaymentConfigurationClient) SubresourceExists(bucket *v1beta1.Bucket) bool {
-	return bucket.Spec.ForProvider.PayerConfiguration != nil
+	return true
 }
 
 // GeneratePutBucketPaymentInput creates the input for the BucketRequestPayment request for the S3 Client
