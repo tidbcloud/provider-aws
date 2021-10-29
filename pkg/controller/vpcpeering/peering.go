@@ -545,12 +545,16 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 		return err
 	}
 
-	_, err = e.client.DeleteVpcPeeringConnectionRequest(&ec2.DeleteVpcPeeringConnectionInput{
-		VpcPeeringConnectionId: peeringRes.VpcPeeringConnections[0].VpcPeeringConnectionId,
-	}).Send(ctx)
+	for _, peering := range peeringRes.VpcPeeringConnections {
+		if peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeDeleted || peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeDeleting {
+			_, err = e.client.DeleteVpcPeeringConnectionRequest(&ec2.DeleteVpcPeeringConnectionInput{
+				VpcPeeringConnectionId: peering.VpcPeeringConnectionId,
+			}).Send(ctx)
 
-	if err != nil && !isAWSErr(err, "InvalidVpcPeeringConnectionID.NotFound", "") {
-		return awsclient.Wrap(err, "errDelete")
+			if err != nil && !isAWSErr(err, "InvalidVpcPeeringConnectionID.NotFound", "") {
+				return awsclient.Wrap(err, "errDelete")
+			}
+		}
 	}
 
 	return nil
