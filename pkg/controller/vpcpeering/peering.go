@@ -546,7 +546,7 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 	}
 
 	for _, peering := range peeringRes.VpcPeeringConnections {
-		if peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeDeleted || peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeDeleting {
+		if !(peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeInitiatingRequest || peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance || peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeActive || peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeExpired || peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeRejected) {
 			_, err = e.client.DeleteVpcPeeringConnectionRequest(&ec2.DeleteVpcPeeringConnectionInput{
 				VpcPeeringConnectionId: peering.VpcPeeringConnectionId,
 			}).Send(ctx)
