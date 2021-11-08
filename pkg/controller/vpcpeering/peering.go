@@ -528,26 +528,28 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 		}
 	}
 
-	peeringFilter := ec2.Filter{
-		Name: aws.String("tag:Name"),
-		Values: []string{
-			cr.Name,
-		},
-	}
+	err = e.deletePeeringByName(ctx, cr)
 
-	describeVpcPeeringConnectionsInput := &ec2.DescribeVpcPeeringConnectionsInput{
-		Filters:    []ec2.Filter{peeringFilter},
-		MaxResults: aws.Int64(10),
-	}
+	return err
+}
 
-	peeringRes, err := e.client.DescribeVpcPeeringConnectionsRequest(describeVpcPeeringConnectionsInput).Send(ctx)
+func isAWSErr(err error, code string, message string) bool {
+	if err, ok := err.(awserr.Error); ok {
+		return err.Code() == code && strings.Contains(err.Message(), message)
+	}
+	return false
+}
+
+func (e *external) deletePeeringByName(ctx context.Context, cr *svcapitypes.VPCPeeringConnection) error {
+	input := peering.GenerateDescribeVpcPeeringConnectionsInput(cr)
+	resp, err := e.client.DescribeVpcPeeringConnectionsRequest(input).Send(ctx)
 	if err != nil {
 		return err
 	}
 
-	for _, peering := range peeringRes.VpcPeeringConnections {
+	for _, peering := range resp.VpcPeeringConnections {
 		if peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeInitiatingRequest || peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance || peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeActive || peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeExpired || peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeRejected {
-			_, err = e.client.DeleteVpcPeeringConnectionRequest(&ec2.DeleteVpcPeeringConnectionInput{
+			_, err := e.client.DeleteVpcPeeringConnectionRequest(&ec2.DeleteVpcPeeringConnectionInput{
 				VpcPeeringConnectionId: peering.VpcPeeringConnectionId,
 			}).Send(ctx)
 
@@ -558,11 +560,4 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 	}
 
 	return nil
-}
-
-func isAWSErr(err error, code string, message string) bool {
-	if err, ok := err.(awserr.Error); ok {
-		return err.Code() == code && strings.Contains(err.Message(), message)
-	}
-	return false
 }
