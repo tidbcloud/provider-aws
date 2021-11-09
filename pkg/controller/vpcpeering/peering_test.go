@@ -17,6 +17,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 
 	svcapitypes "github.com/crossplane/provider-aws/apis/vpcpeering/v1alpha1"
@@ -263,6 +264,94 @@ func TestCreate(t *testing.T) {
 			}
 
 			if diff := cmp.Diff(meta.GetExternalName(tc.args.cr), tc.want.vpcID); diff != "" {
+				t.Errorf("r: -want, +got:\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestDelete(t *testing.T) {
+	g := NewGomegaWithT(t)
+
+	type want struct {
+		err error
+	}
+
+	cases := map[string]struct {
+		args
+		want
+	}{
+		"Delete": {
+			args: args{
+				kube: &test.MockClient{
+					MockDelete: test.NewMockClient().Delete,
+				},
+				route53Cli: &fake.MockRoute53Client{
+					DeleteVPCAssociationAuthorizationRequestFun: func(input *route53.DeleteVPCAssociationAuthorizationInput) route53.DeleteVPCAssociationAuthorizationRequest {
+						g.Expect(*input.HostedZoneId).Should(Equal("owner"))
+						g.Expect(*input.VPC.VPCId).Should(Equal("peerVpc"))
+						g.Expect(string(*&input.VPC.VPCRegion)).Should(Equal("peerRegion"))
+
+						return route53.DeleteVPCAssociationAuthorizationRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &route53.DeleteVPCAssociationAuthorizationOutput{}},
+						}
+					},
+				},
+				cr: buildVPCPeerConnection("test"),
+				client: &fake.MockEC2Client{
+					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+						return ec2.DescribeRouteTablesRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
+								RouteTables: make([]ec2.RouteTable, 0),
+							}},
+						}
+					},
+					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
+						return ec2.DescribeVpcPeeringConnectionsRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
+								//Attributes: attributes,
+								VpcPeeringConnections: []ec2.VpcPeeringConnection{
+									{
+										Status: &ec2.VpcPeeringConnectionStateReason{
+											Code: ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance,
+										},
+
+										Tags: []ec2.Tag{
+											{
+												Key:   aws.String("Name"),
+												Value: aws.String("test"),
+											},
+										},
+										VpcPeeringConnectionId: aws.String("pcx-xxx"),
+									},
+								},
+							}},
+						}
+					},
+					DeleteVpcPeeringConnectionRequestFun: func(input *ec2.DeleteVpcPeeringConnectionInput) ec2.DeleteVpcPeeringConnectionRequest {
+						return ec2.DeleteVpcPeeringConnectionRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DeleteVpcPeeringConnectionOutput{}},
+						}
+					},
+				},
+			},
+			want: want{
+				err: nil,
+			},
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := &external{
+				client:        tc.client,
+				kube:          tc.kube,
+				route53Client: tc.route53Cli,
+			}
+
+			err := e.Delete(context.Background(), tc.args.cr)
+
+			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("r: -want, +got:\n%s", diff)
 			}
 		})
