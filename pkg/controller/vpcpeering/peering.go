@@ -528,7 +528,7 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 		}
 	}
 
-	err = e.deletePeeringByName(ctx, cr)
+	err = e.deleteVPCPeeringConnection(ctx, cr)
 
 	return err
 }
@@ -540,7 +540,7 @@ func isAWSErr(err error, code string, message string) bool {
 	return false
 }
 
-func (e *external) deletePeeringByName(ctx context.Context, cr *svcapitypes.VPCPeeringConnection) error {
+func (e *external) deleteVPCPeeringConnection(ctx context.Context, cr *svcapitypes.VPCPeeringConnection) error {
 	input := peering.GenerateDescribeVpcPeeringConnectionsInput(cr)
 	resp, err := e.client.DescribeVpcPeeringConnectionsRequest(input).Send(ctx)
 	if err != nil {
