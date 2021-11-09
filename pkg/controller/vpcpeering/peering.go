@@ -528,15 +528,9 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 		}
 	}
 
-	_, err = e.client.DeleteVpcPeeringConnectionRequest(&ec2.DeleteVpcPeeringConnectionInput{
-		VpcPeeringConnectionId: cr.Status.AtProvider.VPCPeeringConnectionID,
-	}).Send(ctx)
+	err = e.deleteVPCPeeringConnection(ctx, cr)
 
-	if err != nil && isAWSErr(err, "InvalidVpcPeeringConnectionID.NotFound", "") {
-		return awsclient.Wrap(err, "errDelete")
-	}
-
-	return nil
+	return err
 }
 
 func isAWSErr(err error, code string, message string) bool {
@@ -544,4 +538,26 @@ func isAWSErr(err error, code string, message string) bool {
 		return err.Code() == code && strings.Contains(err.Message(), message)
 	}
 	return false
+}
+
+func (e *external) deleteVPCPeeringConnection(ctx context.Context, cr *svcapitypes.VPCPeeringConnection) error {
+	input := peering.GenerateDescribeVpcPeeringConnectionsInput(cr)
+	resp, err := e.client.DescribeVpcPeeringConnectionsRequest(input).Send(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, peering := range resp.VpcPeeringConnections {
+		if peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeInitiatingRequest || peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance || peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeActive || peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeExpired || peering.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeRejected {
+			_, err := e.client.DeleteVpcPeeringConnectionRequest(&ec2.DeleteVpcPeeringConnectionInput{
+				VpcPeeringConnectionId: peering.VpcPeeringConnectionId,
+			}).Send(ctx)
+
+			if err != nil && !isAWSErr(err, "InvalidVpcPeeringConnectionID.NotFound", "") {
+				return awsclient.Wrap(err, "errDelete")
+			}
+		}
+	}
+
+	return nil
 }
