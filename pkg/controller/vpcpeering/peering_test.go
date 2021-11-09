@@ -290,7 +290,7 @@ func TestDelete(t *testing.T) {
 					DeleteVPCAssociationAuthorizationRequestFun: func(input *route53.DeleteVPCAssociationAuthorizationInput) route53.DeleteVPCAssociationAuthorizationRequest {
 						g.Expect(*input.HostedZoneId).Should(Equal("owner"))
 						g.Expect(*input.VPC.VPCId).Should(Equal("peerVpc"))
-						g.Expect(string(*&input.VPC.VPCRegion)).Should(Equal("peerRegion"))
+						g.Expect(string(input.VPC.VPCRegion)).Should(Equal("peerRegion"))
 
 						return route53.DeleteVPCAssociationAuthorizationRequest{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &route53.DeleteVPCAssociationAuthorizationOutput{}},
