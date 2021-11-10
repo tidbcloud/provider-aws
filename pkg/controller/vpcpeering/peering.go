@@ -151,7 +151,12 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 		return managed.ExternalObservation{ResourceExists: false}, awsclient.Wrap(err, errDescribe)
 	}
 
-	if len(resp.VpcPeeringConnections) == 0 {
+	routes, err := e.checkRoutes(ctx, cr)
+	if err != nil {
+		return managed.ExternalObservation{ResourceExists: false}, err
+	}
+
+	if len(resp.VpcPeeringConnections) == 0 && routes == 0 {
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
@@ -560,4 +565,34 @@ func (e *external) deleteVPCPeeringConnection(ctx context.Context, cr *svcapityp
 	}
 
 	return nil
+}
+
+func (e *external) checkRoutes(ctx context.Context, cr *svcapitypes.VPCPeeringConnection) (int, error) {
+	filter := ec2.Filter{
+		Name: aws.String("vpc-id"),
+		Values: []string{
+			*cr.Spec.ForProvider.VPCID,
+		},
+	}
+
+	decribeRouteTableInput := &ec2.DescribeRouteTablesInput{
+		Filters:    []ec2.Filter{filter},
+		MaxResults: aws.Int64(10),
+	}
+
+	routeTablesRes, err := e.client.DescribeRouteTablesRequest(decribeRouteTableInput).Send(ctx)
+	if err != nil {
+		return -1, err
+	}
+
+	var routes int
+	for _, rt := range routeTablesRes.RouteTables {
+		for _, r := range rt.Routes {
+			if r.DestinationCidrBlock == cr.Spec.ForProvider.PeerCIDR || r.DestinationIpv6CidrBlock == cr.Spec.ForProvider.PeerCIDR {
+				routes++
+			}
+		}
+	}
+
+	return routes, nil
 }
