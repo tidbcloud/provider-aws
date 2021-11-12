@@ -151,7 +151,7 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 		return managed.ExternalObservation{ResourceExists: false}, awsclient.Wrap(err, errDescribe)
 	}
 
-	routes, err := e.checkRoutes(ctx, cr)
+	routes, err := e.countRoutes(ctx, cr)
 	if err != nil {
 		return managed.ExternalObservation{ResourceExists: false}, err
 	}
@@ -570,7 +570,7 @@ func (e *external) deleteVPCPeeringConnection(ctx context.Context, cr *svcapityp
 	return nil
 }
 
-func (e *external) checkRoutes(ctx context.Context, cr *svcapitypes.VPCPeeringConnection) (int, error) {
+func (e *external) countRoutes(ctx context.Context, cr *svcapitypes.VPCPeeringConnection) (int, error) {
 	filter := ec2.Filter{
 		Name: aws.String("vpc-id"),
 		Values: []string{
