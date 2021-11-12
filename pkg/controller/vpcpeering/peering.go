@@ -591,7 +591,7 @@ func (e *external) checkRoutes(ctx context.Context, cr *svcapitypes.VPCPeeringCo
 	var routes int
 	for _, rt := range routeTablesRes.RouteTables {
 		for _, r := range rt.Routes {
-			if r.DestinationCidrBlock == cr.Spec.ForProvider.PeerCIDR || r.DestinationIpv6CidrBlock == cr.Spec.ForProvider.PeerCIDR {
+			if r.VpcPeeringConnectionId == cr.Status.AtProvider.VPCPeeringConnectionID {
 				routes++
 			}
 		}
