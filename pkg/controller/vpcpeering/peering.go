@@ -156,8 +156,11 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 		return managed.ExternalObservation{ResourceExists: false}, err
 	}
 
-	if len(resp.VpcPeeringConnections) == 0 && routes == 0 {
-		return managed.ExternalObservation{ResourceExists: false}, nil
+	if len(resp.VpcPeeringConnections) == 0 {
+		if routes == 0 {
+			return managed.ExternalObservation{ResourceExists: false}, nil
+		}
+		return managed.ExternalObservation{ResourceExists: true}, nil
 	}
 
 	existedPeer := resp.VpcPeeringConnections[0]
