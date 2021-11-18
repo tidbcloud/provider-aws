@@ -64,6 +64,13 @@ func TestObserve(t *testing.T) {
 							}},
 						}
 					},
+					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+						return ec2.DescribeRouteTablesRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
+								RouteTables: make([]ec2.RouteTable, 0),
+							}},
+						}
+					},
 				},
 			},
 			want: want{
@@ -111,6 +118,13 @@ func TestObserve(t *testing.T) {
 							}},
 						}
 					},
+					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+						return ec2.DescribeRouteTablesRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
+								RouteTables: make([]ec2.RouteTable, 0),
+							}},
+						}
+					},
 				},
 			},
 			want: want{
@@ -150,6 +164,13 @@ func TestObserve(t *testing.T) {
 										VpcPeeringConnectionId: aws.String("pcx-xxx"),
 									},
 								},
+							}},
+						}
+					},
+					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+						return ec2.DescribeRouteTablesRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
+								RouteTables: make([]ec2.RouteTable, 0),
 							}},
 						}
 					},
