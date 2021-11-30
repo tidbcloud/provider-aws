@@ -400,7 +400,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 		}
 	}
 
-	if !routeTableReady {
+	if !routeTableReady && cr.Status.AtProvider.VPCPeeringConnectionID != nil {
 		filter := ec2.Filter{
 			Name: aws.String("vpc-id"),
 			Values: []string{
@@ -515,7 +515,7 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 
 	for _, rt := range routeTablesRes.RouteTables {
 		for _, r := range rt.Routes {
-			if r.VpcPeeringConnectionId != nil && *r.VpcPeeringConnectionId == *cr.Status.AtProvider.VPCPeeringConnectionID {
+			if r.VpcPeeringConnectionId != nil && cr.Status.AtProvider.VPCPeeringConnectionID != nil && *r.VpcPeeringConnectionId == *cr.Status.AtProvider.VPCPeeringConnectionID {
 				_, err := e.client.DeleteRouteRequest(&ec2.DeleteRouteInput{
 					DestinationCidrBlock: cr.Spec.ForProvider.PeerCIDR,
 
