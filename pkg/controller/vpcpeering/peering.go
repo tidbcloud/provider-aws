@@ -63,7 +63,8 @@ func SetupVPCPeeringConnection(mgr ctrl.Manager, l logging.Logger, rl workqueue.
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter: ratelimiter.NewDefaultManagedRateLimiter(rl),
+			RateLimiter:             ratelimiter.NewDefaultManagedRateLimiter(rl),
+			MaxConcurrentReconciles: 5,
 		}).
 		For(&svcapitypes.VPCPeeringConnection{}).
 		Complete(managed.NewReconciler(mgr,
@@ -150,7 +151,7 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 	input := peering.GenerateDescribeVpcPeeringConnectionsInput(cr)
 	resp, err := e.client.DescribeVpcPeeringConnectionsRequest(input).Send(ctx)
 	if err != nil {
-		return managed.ExternalObservation{ResourceExists: false}, awsclient.Wrap(err, errDescribe)
+		return managed.ExternalObservation{ResourceExists: false}, errors.Wrap(err, errDescribe)
 	}
 
 	e.log.WithValues("VpcPeering", cr.Name).Debug("Describe VpcPeeringConnections")
@@ -208,7 +209,7 @@ func (e *external) Create(ctx context.Context, mg cpresource.Managed) (managed.E
 
 	resp, err := e.client.CreateVpcPeeringConnectionRequest(input).Send(ctx)
 	if err != nil {
-		return managed.ExternalCreation{}, awsclient.Wrap(err, "create VpcPeeringConnection")
+		return managed.ExternalCreation{}, errors.Wrap(err, "create VpcPeeringConnection")
 	}
 
 	e.log.WithValues("VpcPeering", cr.Name).Debug("Create VpcPeeringConnectio successful")
@@ -233,7 +234,7 @@ func (e *external) Create(ctx context.Context, mg cpresource.Managed) (managed.E
 		Tags: tags,
 	}).Send(ctx)
 	if err != nil {
-		return managed.ExternalCreation{}, awsclient.Wrap(err, "create tag for vpc peering")
+		return managed.ExternalCreation{}, errors.Wrap(err, "create tag for vpc peering")
 	}
 
 	e.log.WithValues("VpcPeering", cr.Name).Debug("Create tag for vpc peering successful")
@@ -261,7 +262,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 		}
 		_, err := e.client.ModifyVpcPeeringConnectionOptionsRequest(modifyVpcPeeringConnectionOptionsInput).Send(ctx)
 		if err != nil {
-			return managed.ExternalUpdate{}, awsclient.Wrap(err, errModifyVpcPeering)
+			return managed.ExternalUpdate{}, errors.Wrap(err, errModifyVpcPeering)
 		}
 		if cr.Annotations == nil {
 			cr.Annotations = map[string]string{}
@@ -269,7 +270,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 		cr.Annotations[attributeModified] = "true"
 		err = e.kube.Update(ctx, cr)
 		if err != nil {
-			return managed.ExternalUpdate{}, awsclient.Wrap(err, "error update peering annotations")
+			return managed.ExternalUpdate{}, errors.Wrap(err, "error update peering annotations")
 		}
 
 		e.log.WithValues("VpcPeering", cr.Name).Debug("Modify VpcPeeringConnection successful")
@@ -288,7 +289,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 		}
 		routeTablesRes, err := e.client.DescribeRouteTablesRequest(describeRouteTablesInput).Send(ctx)
 		if err != nil {
-			return managed.ExternalUpdate{}, awsclient.Wrap(err, errDescribeRouteTable)
+			return managed.ExternalUpdate{}, errors.Wrap(err, errDescribeRouteTable)
 		}
 
 		e.log.WithValues("VpcPeering", cr.Name).Debug("Describe RouteTables for creating")
@@ -303,7 +304,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 			if err != nil {
 				// FIXME: The error is not aws.Err type?
 				if !strings.Contains(err.Error(), "RouteAlreadyExists") {
-					return managed.ExternalUpdate{}, awsclient.Wrap(err, "create route for vpc peering")
+					return managed.ExternalUpdate{}, errors.Wrap(err, "create route for vpc peering")
 				} else {
 					// The route identified by DestinationCidrBlock, if route table already have DestinationCidrBlock point to other vpc peering connetion ID, should be return error
 					for _, route := range rt.Routes {
@@ -311,7 +312,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 							e.log.WithValues("VpcPeering", cr.Name).Debug("Route already exist, no need to recreate", "RouteTableId", rt.RouteTableId, "DestinationCidrBlock", *route.DestinationCidrBlock)
 							continue
 						} else {
-							return managed.ExternalUpdate{}, awsclient.Wrap(err, fmt.Sprintf("failed add route for vpc peering connection: %s, routeID: %s", *cr.Status.AtProvider.VPCPeeringConnectionID, *rt.RouteTableId))
+							return managed.ExternalUpdate{}, errors.Wrap(err, fmt.Sprintf("failed add route for vpc peering connection: %s, routeID: %s", *cr.Status.AtProvider.VPCPeeringConnectionID, *rt.RouteTableId))
 						}
 					}
 				}
@@ -325,7 +326,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 		cr.Annotations[routeTableEnsured] = "true"
 		err = e.kube.Update(ctx, cr)
 		if err != nil {
-			return managed.ExternalUpdate{}, awsclient.Wrap(err, "error update peering annotations")
+			return managed.ExternalUpdate{}, errors.Wrap(err, "error update peering annotations")
 		}
 	}
 
@@ -351,7 +352,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 		err = e.kube.Update(ctx, cr)
 
 		if err != nil {
-			return managed.ExternalUpdate{}, awsclient.Wrap(err, "error update peering annotations")
+			return managed.ExternalUpdate{}, errors.Wrap(err, "error update peering annotations")
 		}
 	}
 
@@ -384,7 +385,7 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 		},
 	}).Send(ctx)
 	if err != nil && !strings.Contains(err.Error(), "VPCAssociationAuthorizationNotFound") {
-		return awsclient.Wrap(err, "delete VPCAssociationAuthorization")
+		return errors.Wrap(err, "delete VPCAssociationAuthorization")
 	}
 	e.log.WithValues("VpcPeering", cr.Name).Debug("Delete VPCAssociationAuthorization successful")
 
@@ -399,7 +400,7 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 	}
 	routeTablesRes, err := e.client.DescribeRouteTablesRequest(describeRouteTablesInput).Send(ctx)
 	if err != nil {
-		return awsclient.Wrap(err, "describe RouteTables")
+		return errors.Wrap(err, "describe RouteTables")
 	}
 
 	e.log.WithValues("VpcPeering", cr.Name).Debug("Describe RouteTables for deleting", "result", routeTablesRes.String())
@@ -412,7 +413,7 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 					RouteTableId: rt.RouteTableId,
 				}).Send(ctx)
 				if err != nil {
-					return awsclient.Wrap(err, "delete Route")
+					return errors.Wrap(err, "delete Route")
 				}
 				e.log.WithValues("VpcPeering", cr.Name).Debug("Delete route successful", "RouteTableId", rt.RouteTableId)
 			}
@@ -421,7 +422,7 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 
 	err = e.deleteVPCPeeringConnection(ctx, cr)
 
-	return awsclient.Wrap(err, "delete VPCPeeringConnection")
+	return errors.Wrap(err, "delete VPCPeeringConnection")
 }
 
 func isAWSErr(err error, code string, message string) bool {
@@ -445,7 +446,7 @@ func (e *external) deleteVPCPeeringConnection(ctx context.Context, cr *svcapityp
 			}).Send(ctx)
 
 			if err != nil && !isAWSErr(err, "InvalidVpcPeeringConnectionID.NotFound", "") {
-				return awsclient.Wrap(err, "delete vpc peering connection")
+				return errors.Wrap(err, "delete vpc peering connection")
 			}
 			e.log.WithValues("VpcPeering", cr.Name).Debug("Delete VpcPeeringConnection successful")
 		}
