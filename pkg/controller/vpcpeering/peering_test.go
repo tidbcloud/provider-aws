@@ -24,10 +24,14 @@ import (
 
 	"github.com/crossplane/provider-aws/pkg/clients/peering/fake"
 
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
+
+var log = logging.NewLogrLogger(zap.New().WithName("vpcpeering"))
 
 type args struct {
 	kube       client.Client
@@ -192,6 +196,7 @@ func TestObserve(t *testing.T) {
 				client:        tc.client,
 				kube:          tc.kube,
 				route53Client: tc.route53Cli,
+				log:           log,
 			}
 			o, err := e.Observe(context.Background(), tc.args.cr)
 
@@ -277,6 +282,7 @@ func TestCreate(t *testing.T) {
 				client:        tc.client,
 				kube:          tc.kube,
 				route53Client: tc.route53Cli,
+				log:           log,
 			}
 			_, err := e.Create(context.Background(), tc.args.cr)
 
@@ -368,6 +374,7 @@ func TestDelete(t *testing.T) {
 				client:        tc.client,
 				kube:          tc.kube,
 				route53Client: tc.route53Cli,
+				log:           log,
 			}
 
 			err := e.Delete(context.Background(), tc.args.cr)
