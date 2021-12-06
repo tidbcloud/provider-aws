@@ -22,6 +22,8 @@ import (
 
 	ec2v1alpha1 "github.com/crossplane/provider-aws/apis/ec2/v1alpha1"
 	ec2v1beta1 "github.com/crossplane/provider-aws/apis/ec2/v1beta1"
+	eksv1alpha1 "github.com/crossplane/provider-aws/apis/eks/v1alpha1"
+	eksv1beta1 "github.com/crossplane/provider-aws/apis/eks/v1beta1"
 	elasticloadbalancingv1alpha1 "github.com/crossplane/provider-aws/apis/elasticloadbalancing/v1alpha1"
 	identityv1alpha1 "github.com/crossplane/provider-aws/apis/identity/v1alpha1"
 	identityv1beta1 "github.com/crossplane/provider-aws/apis/identity/v1beta1"
@@ -51,6 +53,8 @@ func init() {
 		kmsv1alpha1.SchemeBuilder.AddToScheme,
 		ec2v1alpha1.SchemeBuilder.AddToScheme,
 		peeringv1alpha1.SchemeBuilder.AddToScheme,
+		eksv1beta1.SchemeBuilder.AddToScheme,
+		eksv1alpha1.SchemeBuilder.AddToScheme,
 	)
 }
 
