@@ -26,6 +26,8 @@ import (
 
 	"github.com/crossplane/provider-aws/pkg/controller/config"
 	"github.com/crossplane/provider-aws/pkg/controller/ec2/vpc"
+	"github.com/crossplane/provider-aws/pkg/controller/eks"
+	"github.com/crossplane/provider-aws/pkg/controller/eks/nodegroup"
 	"github.com/crossplane/provider-aws/pkg/controller/elasticloadbalancing/elb"
 	"github.com/crossplane/provider-aws/pkg/controller/elasticloadbalancing/elbattachment"
 	"github.com/crossplane/provider-aws/pkg/controller/identity/iampolicy"
@@ -61,6 +63,8 @@ func Setup(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
 		queue.SetupQueue,
 		key.SetupKey,
 		vpcpeering.SetupVPCPeeringConnection,
+		eks.SetupCluster,
+		nodegroup.SetupNodeGroup,
 	} {
 		if err := setup(mgr, l, rl, poll); err != nil {
 			return err

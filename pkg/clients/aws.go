@@ -119,7 +119,37 @@ func UseProviderConfig(ctx context.Context, c client.Client, mg resource.Managed
 		if err != nil {
 			return nil, err
 		}
-		return SetResolver(pc, cfg), nil
+		if role, ok := pc.Annotations["assume-role"]; ok {
+			externalId, ok := pc.Annotations["external-id"]
+			if !ok {
+				return nil, errors.New("external-id must be set when assume-role is set")
+			}
+			stsSvc := sts.New(*cfg)
+			sess := strconv.FormatInt(time.Now().UnixNano(), 10)
+			resp, err := stsSvc.AssumeRoleRequest(&sts.AssumeRoleInput{
+				ExternalId:      &externalId,
+				RoleArn:         &role,
+				RoleSessionName: &sess,
+			}).Send(ctx)
+			if err != nil {
+				return nil, err
+			}
+			creds := aws.Credentials{
+				AccessKeyID:     aws.StringValue(resp.Credentials.AccessKeyId),
+				SecretAccessKey: aws.StringValue(resp.Credentials.SecretAccessKey),
+				SessionToken:    aws.StringValue(resp.Credentials.SessionToken),
+			}
+			configs := external.Configs([]external.Config{external.SharedConfig{
+				Credentials: creds,
+				Region:      region,
+			}})
+			config, err := configs.ResolveAWSConfig(external.DefaultAWSConfigResolvers)
+			if err != nil {
+				return nil, err
+			}
+			return SetResolver(ctx, mg, &config), err
+		}
+		return SetResolver(ctx, mg, cfg), err
 	default:
 		data, err := resource.CommonCredentialExtractor(ctx, s, c, pc.Spec.Credentials.CommonCredentialSelectors)
 		if err != nil {
@@ -362,14 +392,34 @@ func GetConfigV1(ctx context.Context, c client.Client, mg resource.Managed, regi
 	}
 	switch s := pc.Spec.Credentials.Source; s { //nolint:exhaustive
 	case xpv1.CredentialsSourceInjectedIdentity:
-		if pc.Spec.AssumeRoleARN != nil {
-			cfg, err := UsePodServiceAccountV1AssumeRole(ctx, []byte{}, pc, DefaultSection, region)
-			if err != nil {
-				return nil, errors.Wrap(err, "cannot use pod service account to assume role")
+		if role, ok := pc.Annotations["assume-role"]; ok {
+			externalId, ok := pc.Annotations["external-id"]
+			if !ok {
+				return nil, errors.New("external-id must be set when assume-role is set")
 			}
-			return session.NewSession(cfg)
+			cfg, err := UsePodServiceAccount(ctx, []byte{}, DefaultSection, region)
+			if err != nil {
+				return nil, errors.Wrap(err, "cannot use pod service account")
+			}
+			stsSvc := sts.New(*cfg)
+			sess := strconv.FormatInt(time.Now().UnixNano(), 10)
+			resp, err := stsSvc.AssumeRoleRequest(&sts.AssumeRoleInput{
+				ExternalId:      &externalId,
+				RoleArn:         &role,
+				RoleSessionName: &sess,
+			}).Send(ctx)
+			if err != nil {
+				return nil, err
+			}
+			creds := credentials.NewStaticCredentials(
+				aws.StringValue(resp.Credentials.AccessKeyId),
+				aws.StringValue(resp.Credentials.SecretAccessKey),
+				aws.StringValue(resp.Credentials.SessionToken))
+
+			config := SetResolverV1(ctx, mg, awsv1.NewConfig().WithCredentials(creds).WithRegion(region))
+			return session.NewSession(config)
 		}
-		cfg, err := UsePodServiceAccountV1(ctx, []byte{}, pc, DefaultSection, region)
+		cfg, err := UsePodServiceAccountV1(ctx, []byte{}, mg, DefaultSection, region)
 		if err != nil {
 			return nil, errors.Wrap(err, "cannot use pod service account")
 		}
