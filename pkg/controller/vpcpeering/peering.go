@@ -311,7 +311,6 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 				} else {
 					// The route identified by DestinationCidrBlock, if route table already have DestinationCidrBlock point to other vpc peering connetion ID, should be return error
 					for _, route := range rt.Routes {
-						fmt.Println(*route.DestinationCidrBlock, *cr.Spec.ForProvider.PeerCIDR, route.VpcPeeringConnectionId, cr.Status.AtProvider.VPCPeeringConnectionID, "??")
 						if *route.DestinationCidrBlock == *cr.Spec.ForProvider.PeerCIDR && route.VpcPeeringConnectionId != nil && *route.VpcPeeringConnectionId == *cr.Status.AtProvider.VPCPeeringConnectionID {
 							e.log.WithValues("VpcPeering", cr.Name).Debug("Route already exist, no need to recreate", "RouteTableId", rt.RouteTableId, "DestinationCidrBlock", *route.DestinationCidrBlock)
 							continue

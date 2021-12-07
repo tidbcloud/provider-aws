@@ -486,7 +486,6 @@ func TestUpdateRouteTable(t *testing.T) {
 						}
 					},
 
-					// if *route.DestinationCidrBlock == *cr.Spec.ForProvider.PeerCIDR && route.VpcPeeringConnectionId != nil && route.VpcPeeringConnectionId == cr.Status.AtProvider.VPCPeeringConnectionID {
 					CreateRouteRequestFun: func(input *ec2.CreateRouteInput) ec2.CreateRouteRequest {
 						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt1"))))
 						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("10.0.0.0/8"))))
@@ -535,7 +534,6 @@ func TestUpdateRouteTable(t *testing.T) {
 						}
 					},
 
-					// if *route.DestinationCidrBlock == *cr.Spec.ForProvider.PeerCIDR && route.VpcPeeringConnectionId != nil && route.VpcPeeringConnectionId == cr.Status.AtProvider.VPCPeeringConnectionID {
 					CreateRouteRequestFun: func(input *ec2.CreateRouteInput) ec2.CreateRouteRequest {
 						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt1"))))
 						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("10.0.0.0/8"))))
