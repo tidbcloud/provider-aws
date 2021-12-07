@@ -155,8 +155,10 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 	}
 
 	e.log.WithValues("VpcPeering", cr.Name).Debug("Describe VpcPeeringConnections")
+	// extennalName is not null but no vpc peering in aws cloud, maybe vpc peering deleted or status is unavailable
 	if len(resp.VpcPeeringConnections) == 0 {
-		return managed.ExternalObservation{ResourceExists: false}, nil
+		cr.Status.SetConditions(xpv1.Unavailable())
+		return managed.ExternalObservation{ResourceExists: true}, errors.Wrap(e.kube.Status().Update(ctx, cr), errUpdateManagedStatus)
 	}
 
 	existedPeer := resp.VpcPeeringConnections[0]
@@ -249,6 +251,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 	if !ok {
 		return managed.ExternalUpdate{}, errors.New(errUnexpectedObject)
 	}
+
 	_, routeTableReady := cr.GetAnnotations()[routeTableEnsured]
 	_, hostZoneReady := cr.GetAnnotations()[hostedZoneEnsured]
 	_, attributeReady := cr.GetAnnotations()[attributeModified]
@@ -308,7 +311,8 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 				} else {
 					// The route identified by DestinationCidrBlock, if route table already have DestinationCidrBlock point to other vpc peering connetion ID, should be return error
 					for _, route := range rt.Routes {
-						if *route.DestinationCidrBlock == *cr.Spec.ForProvider.PeerCIDR && route.VpcPeeringConnectionId != nil && route.VpcPeeringConnectionId == cr.Status.AtProvider.VPCPeeringConnectionID {
+						fmt.Println(*route.DestinationCidrBlock, *cr.Spec.ForProvider.PeerCIDR, route.VpcPeeringConnectionId, cr.Status.AtProvider.VPCPeeringConnectionID, "??")
+						if *route.DestinationCidrBlock == *cr.Spec.ForProvider.PeerCIDR && route.VpcPeeringConnectionId != nil && *route.VpcPeeringConnectionId == *cr.Status.AtProvider.VPCPeeringConnectionID {
 							e.log.WithValues("VpcPeering", cr.Name).Debug("Route already exist, no need to recreate", "RouteTableId", rt.RouteTableId, "DestinationCidrBlock", *route.DestinationCidrBlock)
 							continue
 						} else {

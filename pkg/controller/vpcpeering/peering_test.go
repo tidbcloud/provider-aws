@@ -1,6 +1,10 @@
 package vpcpeering
 
 import (
+	"fmt"
+	"strings"
+
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
 
 	"net/http"
@@ -31,7 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-var log = logging.NewLogrLogger(zap.New().WithName("vpcpeering"))
+var log = logging.NewLogrLogger(zap.New(zap.UseDevMode(true)).WithName("vpcpeering"))
 
 type args struct {
 	kube       client.Client
@@ -41,6 +45,7 @@ type args struct {
 }
 
 func TestObserve(t *testing.T) {
+	g := NewGomegaWithT(t)
 	type want struct {
 		result managed.ExternalObservation
 		err    error
@@ -55,6 +60,9 @@ func TestObserve(t *testing.T) {
 				kube: &test.MockClient{
 					MockUpdate: test.NewMockClient().Update,
 					MockStatusUpdate: func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						cr, ok := obj.(*svcapitypes.VPCPeeringConnection)
+						g.Expect(ok).Should(Equal(true))
+						g.Expect(cr.Status.ConditionedStatus.GetCondition(xpv1.TypeReady).Reason, xpv1.ReasonUnavailable)
 						return nil
 					},
 				},
@@ -79,7 +87,7 @@ func TestObserve(t *testing.T) {
 			},
 			want: want{
 				result: managed.ExternalObservation{
-					ResourceExists:          false,
+					ResourceExists:          true,
 					ResourceUpToDate:        false,
 					ResourceLateInitialized: false,
 				},
@@ -381,6 +389,191 @@ func TestDelete(t *testing.T) {
 
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("r: -want, +got:\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestUpdateRouteTable(t *testing.T) {
+	g := NewGomegaWithT(t)
+
+	var peeringConnectionID = "my-peering-id"
+	pc := buildVPCPeerConnection("test")
+	// test vpc peering connection no route ready annotation
+	pc.Annotations[attributeModified] = "true"
+	pc.Annotations[hostedZoneEnsured] = "true"
+	pc.Spec.ForProvider.PeerCIDR = aws.String("10.0.0.0/8")
+	pc.Status.AtProvider.VPCPeeringConnectionID = aws.String(peeringConnectionID)
+	type want struct {
+		result managed.ExternalUpdate
+		err    error
+	}
+
+	cases := map[string]struct {
+		args
+		want
+	}{
+		"Create route successful": {
+			args: args{
+				kube: &test.MockClient{
+					MockUpdate: test.NewMockClient().Update,
+					MockStatusUpdate: func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return nil
+					},
+				},
+				route53Cli: &fake.MockRoute53Client{},
+				cr:         pc.DeepCopy(),
+				client: &fake.MockEC2Client{
+					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+						g.Expect(len(input.Filters)).Should(Equal(1))
+						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
+						g.Expect(input.Filters[0].Values).Should((Equal([]string{"ownerVpc"})))
+						return ec2.DescribeRouteTablesRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
+								RouteTables: []ec2.RouteTable{
+									{
+										RouteTableId: aws.String("rt1"),
+									},
+								},
+							}},
+						}
+					},
+					CreateRouteRequestFun: func(input *ec2.CreateRouteInput) ec2.CreateRouteRequest {
+						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt1"))))
+						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("10.0.0.0/8"))))
+						g.Expect(input.VpcPeeringConnectionId).Should((Equal(aws.String(peeringConnectionID))))
+						return ec2.CreateRouteRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.CreateRouteOutput{
+								Return: aws.Bool(true),
+							}},
+						}
+					},
+				},
+			},
+			want: want{
+				result: managed.ExternalUpdate{},
+			},
+		},
+		"Create route already exist and routes is match": {
+			args: args{
+				kube: &test.MockClient{
+					MockUpdate: test.NewMockClient().Update,
+					MockStatusUpdate: func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return nil
+					},
+				},
+				route53Cli: &fake.MockRoute53Client{},
+				cr:         pc.DeepCopy(),
+				client: &fake.MockEC2Client{
+					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+						g.Expect(len(input.Filters)).Should(Equal(1))
+						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
+						g.Expect(input.Filters[0].Values).Should((Equal([]string{"ownerVpc"})))
+						return ec2.DescribeRouteTablesRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
+								RouteTables: []ec2.RouteTable{
+									{
+										RouteTableId: aws.String("rt1"),
+										Routes: []ec2.Route{
+											{
+												DestinationCidrBlock:   aws.String("10.0.0.0/8"),
+												VpcPeeringConnectionId: aws.String(peeringConnectionID),
+											},
+										},
+									},
+								},
+							}},
+						}
+					},
+
+					// if *route.DestinationCidrBlock == *cr.Spec.ForProvider.PeerCIDR && route.VpcPeeringConnectionId != nil && route.VpcPeeringConnectionId == cr.Status.AtProvider.VPCPeeringConnectionID {
+					CreateRouteRequestFun: func(input *ec2.CreateRouteInput) ec2.CreateRouteRequest {
+						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt1"))))
+						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("10.0.0.0/8"))))
+						g.Expect(input.VpcPeeringConnectionId).Should((Equal(aws.String(peeringConnectionID))))
+						return ec2.CreateRouteRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.CreateRouteOutput{
+								Return: aws.Bool(false),
+							}, Error: fmt.Errorf("RouteAlreadyExists")},
+						}
+					},
+				},
+			},
+			want: want{
+				result: managed.ExternalUpdate{},
+			},
+		},
+		"Create route already exist but route cidr already occupied": {
+			args: args{
+				kube: &test.MockClient{
+					MockUpdate: test.NewMockClient().Update,
+					MockStatusUpdate: func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return nil
+					},
+				},
+				route53Cli: &fake.MockRoute53Client{},
+				cr:         pc.DeepCopy(),
+				client: &fake.MockEC2Client{
+					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+						g.Expect(len(input.Filters)).Should(Equal(1))
+						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
+						g.Expect(input.Filters[0].Values).Should((Equal([]string{"ownerVpc"})))
+						return ec2.DescribeRouteTablesRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
+								RouteTables: []ec2.RouteTable{
+									{
+										RouteTableId: aws.String("rt1"),
+										Routes: []ec2.Route{
+											{
+												DestinationCidrBlock:   aws.String("10.0.0.0/8"),
+												VpcPeeringConnectionId: aws.String("other-peering"),
+											},
+										},
+									},
+								},
+							}},
+						}
+					},
+
+					// if *route.DestinationCidrBlock == *cr.Spec.ForProvider.PeerCIDR && route.VpcPeeringConnectionId != nil && route.VpcPeeringConnectionId == cr.Status.AtProvider.VPCPeeringConnectionID {
+					CreateRouteRequestFun: func(input *ec2.CreateRouteInput) ec2.CreateRouteRequest {
+						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt1"))))
+						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("10.0.0.0/8"))))
+						g.Expect(input.VpcPeeringConnectionId).Should((Equal(aws.String(peeringConnectionID))))
+						return ec2.CreateRouteRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.CreateRouteOutput{
+								Return: aws.Bool(false),
+							}, Error: fmt.Errorf("RouteAlreadyExists")},
+						}
+					},
+				},
+			},
+			want: want{
+				result: managed.ExternalUpdate{},
+				err:    fmt.Errorf("failed add route for vpc peering connection: my-peering-id, routeID: rt1: RouteAlreadyExists"),
+			},
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := &external{
+				client:        tc.client,
+				kube:          tc.kube,
+				route53Client: tc.route53Cli,
+				log:           log,
+			}
+			result, err := e.Update(context.Background(), tc.args.cr)
+			if tc.want.err != nil {
+				if diff := cmp.Diff(strings.Contains(err.Error(), tc.want.err.Error()), true); diff != "" {
+					t.Fatalf("r: -want, +got:\n%s", diff)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+
+			if diff := cmp.Diff(tc.want.result, result); diff != "" {
+				t.Fatalf("r: -want, +got:\n%s", diff)
 			}
 		})
 	}
