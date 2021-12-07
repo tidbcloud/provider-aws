@@ -479,6 +479,11 @@ func TestUpdateRouteTable(t *testing.T) {
 												DestinationCidrBlock:   aws.String("10.0.0.0/8"),
 												VpcPeeringConnectionId: aws.String(peeringConnectionID),
 											},
+											// cidr not equal will never conflict
+											{
+												DestinationCidrBlock:   aws.String("other-cidr"),
+												VpcPeeringConnectionId: aws.String(peeringConnectionID),
+											},
 										},
 									},
 								},
