@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
 
 	"net/http"
@@ -45,7 +44,6 @@ type args struct {
 }
 
 func TestObserve(t *testing.T) {
-	g := NewGomegaWithT(t)
 	type want struct {
 		result managed.ExternalObservation
 		err    error
@@ -60,9 +58,6 @@ func TestObserve(t *testing.T) {
 				kube: &test.MockClient{
 					MockUpdate: test.NewMockClient().Update,
 					MockStatusUpdate: func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-						cr, ok := obj.(*svcapitypes.VPCPeeringConnection)
-						g.Expect(ok).Should(Equal(true))
-						g.Expect(cr.Status.ConditionedStatus.GetCondition(xpv1.TypeReady).Reason, xpv1.ReasonUnavailable)
 						return nil
 					},
 				},
@@ -87,7 +82,7 @@ func TestObserve(t *testing.T) {
 			},
 			want: want{
 				result: managed.ExternalObservation{
-					ResourceExists:          true,
+					ResourceExists:          false,
 					ResourceUpToDate:        false,
 					ResourceLateInitialized: false,
 				},

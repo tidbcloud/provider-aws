@@ -155,10 +155,9 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 	}
 
 	e.log.WithValues("VpcPeering", cr.Name).Debug("Describe VpcPeeringConnections")
-	// extennalName is not null but no vpc peering in aws cloud, maybe vpc peering deleted or status is unavailable
+	// TODO: if user delete vpc peering in aws cloud, how ensure subresource deleted
 	if len(resp.VpcPeeringConnections) == 0 {
-		cr.Status.SetConditions(xpv1.Unavailable())
-		return managed.ExternalObservation{ResourceExists: true}, errors.Wrap(e.kube.Status().Update(ctx, cr), errUpdateManagedStatus)
+		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
 	existedPeer := resp.VpcPeeringConnections[0]
