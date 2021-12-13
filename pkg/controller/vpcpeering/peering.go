@@ -64,7 +64,7 @@ func SetupVPCPeeringConnection(mgr ctrl.Manager, l logging.Logger, rl workqueue.
 		Named(name).
 		WithOptions(controller.Options{
 			RateLimiter:             ratelimiter.NewDefaultManagedRateLimiter(rl),
-			MaxConcurrentReconciles: 5,
+			MaxConcurrentReconciles: 1,
 		}).
 		For(&svcapitypes.VPCPeeringConnection{}).
 		Complete(managed.NewReconciler(mgr,
