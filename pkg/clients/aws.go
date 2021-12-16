@@ -321,7 +321,11 @@ func UseProviderSecretAssumeRole(ctx context.Context, data []byte, profile, regi
 	}))
 
 	stsSvc := sts.NewFromConfig(config)
-	stsAssume := stscreds.NewAssumeRoleProvider(stsSvc, StringValue(pc.Spec.AssumeRoleARN))
+	stsAssume := stscreds.NewAssumeRoleProvider(
+		stsSvc,
+		StringValue(pc.Spec.AssumeRoleARN),
+		func(opt *stscreds.AssumeRoleOptions) { opt.ExternalID = pc.Spec.ExternalID },
+	)
 	config.Credentials = aws.NewCredentialsCache(stsAssume)
 
 	return &config, err
@@ -343,6 +347,7 @@ func UsePodServiceAccountAssumeRole(ctx context.Context, _ []byte, _, region str
 			stscreds.NewAssumeRoleProvider(
 				stsclient,
 				StringValue(pc.Spec.AssumeRoleARN),
+				func(opt *stscreds.AssumeRoleOptions) { opt.ExternalID = pc.Spec.ExternalID },
 			)),
 		),
 	)
@@ -454,7 +459,11 @@ func UseProviderSecretV1AssumeRole(ctx context.Context, data []byte, pc *v1beta1
 	}
 
 	stsSvc := sts.NewFromConfig(config)
-	stsAssume := stscreds.NewAssumeRoleProvider(stsSvc, StringValue(pc.Spec.AssumeRoleARN))
+	stsAssume := stscreds.NewAssumeRoleProvider(
+		stsSvc,
+		StringValue(pc.Spec.AssumeRoleARN),
+		func(opt *stscreds.AssumeRoleOptions) { opt.ExternalID = pc.Spec.ExternalID },
+	)
 	config.Credentials = aws.NewCredentialsCache(stsAssume)
 
 	v2creds, err := config.Credentials.Retrieve(ctx)
@@ -518,6 +527,7 @@ func UsePodServiceAccountV1AssumeRole(ctx context.Context, _ []byte, pc *v1beta1
 			stscreds.NewAssumeRoleProvider(
 				stsclient,
 				StringValue(pc.Spec.AssumeRoleARN),
+				func(opt *stscreds.AssumeRoleOptions) { opt.ExternalID = pc.Spec.ExternalID },
 			)),
 		),
 	)
