@@ -178,6 +178,12 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 		}
 	}
 
+	// If vpc peering connection status is pending acceptance, modify vpc peering attributes request will failed.
+	// In order to reduce the API request to AWS, return errors early to avoid unnecessary API requests.
+	if existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance {
+		return managed.ExternalObservation{ResourceExists: true}, fmt.Errorf("Waiting for the user to accept the vpc peering connection")
+	}
+
 	_, routeTableReady := cr.GetAnnotations()[routeTableEnsured]
 	_, hostZoneReady := cr.GetAnnotations()[hostedZoneEnsured]
 	_, attributeReady := cr.GetAnnotations()[attributeModified]
