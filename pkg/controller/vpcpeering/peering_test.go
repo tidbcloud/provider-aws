@@ -159,7 +159,7 @@ func TestObserve(t *testing.T) {
 								VpcPeeringConnections: []ec2.VpcPeeringConnection{
 									{
 										Status: &ec2.VpcPeeringConnectionStateReason{
-											Code: ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance,
+											Code: ec2.VpcPeeringConnectionStateReasonCodeActive,
 										},
 
 										Tags: []ec2.Tag{
@@ -189,6 +189,48 @@ func TestObserve(t *testing.T) {
 					ResourceUpToDate:        false,
 					ResourceLateInitialized: false,
 				},
+			},
+		},
+		"PendingAccept": {
+			args: args{
+				kube: &test.MockClient{
+					MockUpdate: test.NewMockClient().Update,
+					MockStatusUpdate: func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return nil
+					},
+				},
+				cr: buildVPCPeerConnection("test"),
+				client: &fake.MockEC2Client{
+					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
+						return ec2.DescribeVpcPeeringConnectionsRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
+								//Attributes: attributes,
+								VpcPeeringConnections: []ec2.VpcPeeringConnection{
+									{
+										Status: &ec2.VpcPeeringConnectionStateReason{
+											Code: ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance,
+										},
+									},
+								},
+							}},
+						}
+					},
+					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+						return ec2.DescribeRouteTablesRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
+								RouteTables: make([]ec2.RouteTable, 0),
+							}},
+						}
+					},
+				},
+			},
+			want: want{
+				result: managed.ExternalObservation{
+					ResourceExists:          true,
+					ResourceUpToDate:        false,
+					ResourceLateInitialized: false,
+				},
+				err: fmt.Errorf(errWaitVpcPeeringConnectionAccept),
 			},
 		},
 	}
