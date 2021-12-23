@@ -203,7 +203,7 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 	return managed.ExternalObservation{
 		ResourceExists:          true,
 		ResourceUpToDate:        isUPToDate(cr.Status.Conditions),
-		ResourceLateInitialized: true,
+		ResourceLateInitialized: false,
 	}, errors.Wrap(e.kube.Status().Update(ctx, cr), errUpdateManagedStatus)
 }
 
