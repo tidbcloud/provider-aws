@@ -25,9 +25,9 @@ import (
 
 	svcapitypes "github.com/crossplane/provider-aws/apis/vpcpeering/v1alpha1"
 
-	"github.com/crossplane/provider-aws/pkg/clients/peering/fake"
-
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
+	iamfake "github.com/crossplane/provider-aws/pkg/clients/iam/fake"
+	"github.com/crossplane/provider-aws/pkg/clients/peering/fake"
 	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,6 +41,7 @@ type args struct {
 	client     peering.EC2Client
 	route53Cli peering.Route53Client
 	cr         *svcapitypes.VPCPeeringConnection
+	acountID   string
 }
 
 func TestObserve(t *testing.T) {
@@ -237,12 +238,17 @@ func TestObserve(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
+			iamClient := new(iamfake.Client)
+			iamClient.On("GetAccountID").Return(tc.acountID, nil)
+
 			e := &external{
 				client:        tc.client,
 				kube:          tc.kube,
 				route53Client: tc.route53Cli,
 				log:           log,
+				iamClient:     iamClient,
 			}
+
 			o, err := e.Observe(context.Background(), tc.args.cr)
 
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
@@ -260,9 +266,10 @@ func TestCreate(t *testing.T) {
 	g := NewGomegaWithT(t)
 
 	type want struct {
-		result managed.ExternalCreation
-		err    error
-		vpcID  string
+		result   managed.ExternalCreation
+		err      error
+		vpcID    string
+		acountID string
 	}
 
 	cases := map[string]struct {
@@ -415,11 +422,14 @@ func TestDelete(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
+			iamClient := new(iamfake.Client)
+			iamClient.On("GetAccountID").Return(tc.acountID, nil)
 			e := &external{
 				client:        tc.client,
 				kube:          tc.kube,
 				route53Client: tc.route53Cli,
 				log:           log,
+				iamClient:     iamClient,
 			}
 
 			err := e.Delete(context.Background(), tc.args.cr)
@@ -449,6 +459,7 @@ func TestUpdateRouteTable(t *testing.T) {
 	cases := map[string]struct {
 		args
 		want
+		acountID string
 	}{
 		"Create route successful": {
 			args: args{
@@ -597,11 +608,14 @@ func TestUpdateRouteTable(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
+			iamClient := new(iamfake.Client)
+			iamClient.On("GetAccountID").Return(tc.acountID, nil)
 			e := &external{
 				client:        tc.client,
 				kube:          tc.kube,
 				route53Client: tc.route53Cli,
 				log:           log,
+				iamClient:     iamClient,
 			}
 			result, err := e.Update(context.Background(), tc.args.cr)
 			if tc.want.err != nil {
