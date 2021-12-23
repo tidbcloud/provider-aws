@@ -236,6 +236,8 @@ type EC2Client interface {
 	ModifyVpcPeeringConnectionOptionsRequest(*ec2.ModifyVpcPeeringConnectionOptionsInput) ec2.ModifyVpcPeeringConnectionOptionsRequest
 	// DeleteVpcPeeringConnectionRequest delete vpc peering
 	DeleteVpcPeeringConnectionRequest(*ec2.DeleteVpcPeeringConnectionInput) ec2.DeleteVpcPeeringConnectionRequest
+	// AcceptVpcPeeringConnectionRequest accept vpc peering connection
+	AcceptVpcPeeringConnectionRequest(*ec2.AcceptVpcPeeringConnectionInput) ec2.AcceptVpcPeeringConnectionRequest
 }
 
 // NewEc2Client create ec2 client

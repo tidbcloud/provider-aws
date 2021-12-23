@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 
+	"github.com/crossplane/provider-aws/pkg/clients/iam"
 	"github.com/crossplane/provider-aws/pkg/clients/peering"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -111,6 +112,7 @@ func (c *connector) Connect(ctx context.Context, mg cpresource.Managed) (managed
 		kube:          c.kube,
 		route53Client: peering.NewRoute53Client(*cfg),
 		client:        peering.NewEc2Client(*cfg),
+		iamClient:     iam.NewClient(*cfg),
 		log:           c.log,
 	}, nil
 }
@@ -136,6 +138,7 @@ type external struct {
 	client        peering.EC2Client
 	route53Client peering.Route53Client
 	log           logging.Logger
+	iamClient     iam.Client
 }
 
 func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.ExternalObservation, error) { // nolint:gocyclo
@@ -179,10 +182,26 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 		}
 	}
 
-	// If vpc peering connection status is pending acceptance, modify vpc peering attributes request will failed.
-	// In order to reduce the API request to AWS, return errors early to avoid unnecessary API requests.
 	if existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance {
-		return managed.ExternalObservation{ResourceExists: true}, fmt.Errorf(errWaitVpcPeeringConnectionAccept)
+		isInternal, err := e.isInternalVpcPeering(cr)
+		if err != nil {
+			return managed.ExternalObservation{ResourceExists: true}, err
+		}
+
+		// if requester peering connection acountID same with accepter vpc peering connection, auto-accept it
+		if isInternal {
+			// accept it when vpc peering connection created
+			if cr.Status.AtProvider.VPCPeeringConnectionID != nil {
+				_, err := e.client.AcceptVpcPeeringConnectionRequest(&ec2.AcceptVpcPeeringConnectionInput{VpcPeeringConnectionId: aws.String(*cr.Status.AtProvider.VPCPeeringConnectionID)}).Send(ctx)
+				if err != nil {
+					return managed.ExternalObservation{ResourceExists: true}, err
+				}
+			}
+		} else {
+			// If vpc peering connection status is pending acceptance, modify vpc peering attributes request will failed.
+			// In order to reduce the API request to AWS, return errors early to avoid unnecessary API requests.
+			return managed.ExternalObservation{ResourceExists: true}, fmt.Errorf(errWaitVpcPeeringConnectionAccept)
+		}
 	}
 
 	_, routeTableReady := cr.GetAnnotations()[routeTableEnsured]
@@ -262,12 +281,23 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 	_, hostZoneReady := cr.GetAnnotations()[hostedZoneEnsured]
 	_, attributeReady := cr.GetAnnotations()[attributeModified]
 
+	isInternal, err := e.isInternalVpcPeering(cr)
+	if err != nil {
+		return managed.ExternalUpdate{}, err
+	}
+
 	if !attributeReady && cr.Status.AtProvider.VPCPeeringConnectionID != nil {
 		modifyVpcPeeringConnectionOptionsInput := &ec2.ModifyVpcPeeringConnectionOptionsInput{
 			VpcPeeringConnectionId: cr.Status.AtProvider.VPCPeeringConnectionID,
 			RequesterPeeringConnectionOptions: &ec2.PeeringConnectionOptionsRequest{
 				AllowDnsResolutionFromRemoteVpc: aws.Bool(true),
 			},
+		}
+
+		if isInternal {
+			modifyVpcPeeringConnectionOptionsInput.AccepterPeeringConnectionOptions = &ec2.PeeringConnectionOptionsRequest{
+				AllowDnsResolutionFromRemoteVpc: aws.Bool(true),
+			}
 		}
 		_, err := e.client.ModifyVpcPeeringConnectionOptionsRequest(modifyVpcPeeringConnectionOptionsInput).Send(ctx)
 		if err != nil {
@@ -286,15 +316,17 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 	}
 
 	if !routeTableReady && cr.Status.AtProvider.VPCPeeringConnectionID != nil {
+		vpcIDs := []string{*cr.Spec.ForProvider.VPCID}
+		if isInternal {
+			vpcIDs = append(vpcIDs, *cr.Spec.ForProvider.PeerVPCID)
+		}
 		filter := ec2.Filter{
-			Name: aws.String("vpc-id"),
-			Values: []string{
-				*cr.Spec.ForProvider.VPCID,
-			},
+			Name:   aws.String("vpc-id"),
+			Values: vpcIDs,
 		}
 		describeRouteTablesInput := &ec2.DescribeRouteTablesInput{
 			Filters:    []ec2.Filter{filter},
-			MaxResults: aws.Int64(10),
+			MaxResults: aws.Int64(100),
 		}
 		routeTablesRes, err := e.client.DescribeRouteTablesRequest(describeRouteTablesInput).Send(ctx)
 		if err != nil {
@@ -401,14 +433,23 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 	}
 	e.log.WithValues("VpcPeering", cr.Name).Debug("Delete VPCAssociationAuthorization successful")
 
+	isInternal, err := e.isInternalVpcPeering(cr)
+	if err != nil {
+		return err
+	}
+
+	vpcIDs := []string{*cr.Spec.ForProvider.VPCID}
+	if isInternal {
+		vpcIDs = append(vpcIDs, *cr.Spec.ForProvider.PeerVPCID)
+	}
+
 	filter := ec2.Filter{
-		Name: aws.String("vpc-id"),
-		Values: []string{
-			*cr.Spec.ForProvider.VPCID,
-		},
+		Name:   aws.String("vpc-id"),
+		Values: vpcIDs,
 	}
 	describeRouteTablesInput := &ec2.DescribeRouteTablesInput{
-		Filters: []ec2.Filter{filter},
+		Filters:    []ec2.Filter{filter},
+		MaxResults: aws.Int64(100),
 	}
 	routeTablesRes, err := e.client.DescribeRouteTablesRequest(describeRouteTablesInput).Send(ctx)
 	if err != nil {
@@ -465,4 +506,18 @@ func (e *external) deleteVPCPeeringConnection(ctx context.Context, cr *svcapityp
 	}
 
 	return nil
+}
+
+func (e *external) isInternalVpcPeering(cr *svcapitypes.VPCPeeringConnection) (bool, error) {
+	acountID, err := e.iamClient.GetAccountID()
+	if err != nil {
+		return false, err
+	}
+
+	// if requester peering connection acountID same with accepter vpc peering connection, auto-accept it
+	if cr.Spec.ForProvider.PeerOwnerID != nil && acountID == *cr.Spec.ForProvider.PeerOwnerID {
+		return true, nil
+	}
+
+	return false, nil
 }
