@@ -181,7 +181,7 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 			return managed.ExternalObservation{ResourceExists: true}, err
 		}
 	}
-
+  
 	if existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance {
 		isInternal, err := e.isInternalVpcPeering(cr)
 		if err != nil {
@@ -202,7 +202,6 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 			// In order to reduce the API request to AWS, return errors early to avoid unnecessary API requests.
 			return managed.ExternalObservation{ResourceExists: true}, fmt.Errorf(errWaitVpcPeeringConnectionAccept)
 		}
-	}
 
 	_, routeTableReady := cr.GetAnnotations()[routeTableEnsured]
 	_, hostZoneReady := cr.GetAnnotations()[hostedZoneEnsured]
