@@ -45,6 +45,7 @@ type args struct {
 }
 
 func TestObserve(t *testing.T) {
+	g := NewGomegaWithT(t)
 	type want struct {
 		result managed.ExternalObservation
 		err    error
@@ -234,6 +235,55 @@ func TestObserve(t *testing.T) {
 				err: fmt.Errorf(errWaitVpcPeeringConnectionAccept),
 			},
 		},
+		"InternalPeering": {
+			args: args{
+				kube: &test.MockClient{
+					MockUpdate: test.NewMockClient().Update,
+					MockStatusUpdate: func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return nil
+					},
+				},
+				cr: buildVPCPeerConnection("test"),
+				client: &fake.MockEC2Client{
+					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
+						return ec2.DescribeVpcPeeringConnectionsRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
+								//Attributes: attributes,
+								VpcPeeringConnections: []ec2.VpcPeeringConnection{
+									{
+										Status: &ec2.VpcPeeringConnectionStateReason{
+											Code: ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance,
+										},
+										VpcPeeringConnectionId: aws.String("peerConnectionID"),
+									},
+								},
+							}},
+						}
+					},
+					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+						return ec2.DescribeRouteTablesRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
+								RouteTables: make([]ec2.RouteTable, 0),
+							}},
+						}
+					},
+					AcceptVpcPeeringConnectionRequestFun: func(input *ec2.AcceptVpcPeeringConnectionInput) ec2.AcceptVpcPeeringConnectionRequest {
+						g.Expect(*input.VpcPeeringConnectionId).Should(Equal("peerConnectionID"))
+						return ec2.AcceptVpcPeeringConnectionRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.AcceptVpcPeeringConnectionOutput{}},
+						}
+					},
+				},
+				acountID: "peerOwner",
+			},
+			want: want{
+				result: managed.ExternalObservation{
+					ResourceExists:          true,
+					ResourceUpToDate:        false,
+					ResourceLateInitialized: false,
+				},
+			},
+		},
 	}
 
 	for name, tc := range cases {
@@ -418,6 +468,66 @@ func TestDelete(t *testing.T) {
 				err: nil,
 			},
 		},
+		"InternalPeering": {
+			args: args{
+				acountID: "peerOwner",
+				kube: &test.MockClient{
+					MockDelete: test.NewMockClient().Delete,
+				},
+				route53Cli: &fake.MockRoute53Client{
+					DeleteVPCAssociationAuthorizationRequestFun: func(input *route53.DeleteVPCAssociationAuthorizationInput) route53.DeleteVPCAssociationAuthorizationRequest {
+						g.Expect(*input.HostedZoneId).Should(Equal("owner"))
+						g.Expect(*input.VPC.VPCId).Should(Equal("peerVpc"))
+						g.Expect(string(input.VPC.VPCRegion)).Should(Equal("peerRegion"))
+
+						return route53.DeleteVPCAssociationAuthorizationRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &route53.DeleteVPCAssociationAuthorizationOutput{}},
+						}
+					},
+				},
+				cr: buildVPCPeerConnection("test"),
+				client: &fake.MockEC2Client{
+					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+						g.Expect(input.Filters[0].Values).Should(Equal([]string{"ownerVpc", "peerVpc"}))
+						return ec2.DescribeRouteTablesRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
+								RouteTables: make([]ec2.RouteTable, 0),
+							}},
+						}
+					},
+					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
+						return ec2.DescribeVpcPeeringConnectionsRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
+								//Attributes: attributes,
+								VpcPeeringConnections: []ec2.VpcPeeringConnection{
+									{
+										Status: &ec2.VpcPeeringConnectionStateReason{
+											Code: ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance,
+										},
+
+										Tags: []ec2.Tag{
+											{
+												Key:   aws.String("Name"),
+												Value: aws.String("test"),
+											},
+										},
+										VpcPeeringConnectionId: aws.String("pcx-xxx"),
+									},
+								},
+							}},
+						}
+					},
+					DeleteVpcPeeringConnectionRequestFun: func(input *ec2.DeleteVpcPeeringConnectionInput) ec2.DeleteVpcPeeringConnectionRequest {
+						return ec2.DeleteVpcPeeringConnectionRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DeleteVpcPeeringConnectionOutput{}},
+						}
+					},
+				},
+			},
+			want: want{
+				err: nil,
+			},
+		},
 	}
 
 	for name, tc := range cases {
@@ -459,7 +569,6 @@ func TestUpdateRouteTable(t *testing.T) {
 	cases := map[string]struct {
 		args
 		want
-		acountID string
 	}{
 		"Create route successful": {
 			args: args{
@@ -602,6 +711,49 @@ func TestUpdateRouteTable(t *testing.T) {
 			want: want{
 				result: managed.ExternalUpdate{},
 				err:    fmt.Errorf("failed add route for vpc peering connection: my-peering-id, routeID: rt1: RouteAlreadyExists"),
+			},
+		},
+		"Create route when internal vpc peering": {
+			args: args{
+				acountID: "peerOwner",
+				kube: &test.MockClient{
+					MockUpdate: test.NewMockClient().Update,
+					MockStatusUpdate: func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return nil
+					},
+				},
+				route53Cli: &fake.MockRoute53Client{},
+				cr:         pc.DeepCopy(),
+				client: &fake.MockEC2Client{
+					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+						g.Expect(len(input.Filters)).Should(Equal(1))
+						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
+						// will describe requester and accepter vpc ID when internal vpc peering
+						g.Expect(input.Filters[0].Values).Should((Equal([]string{"ownerVpc", "peerVpc"})))
+						return ec2.DescribeRouteTablesRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
+								RouteTables: []ec2.RouteTable{
+									{
+										RouteTableId: aws.String("rt1"),
+									},
+								},
+							}},
+						}
+					},
+					CreateRouteRequestFun: func(input *ec2.CreateRouteInput) ec2.CreateRouteRequest {
+						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt1"))))
+						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("10.0.0.0/8"))))
+						g.Expect(input.VpcPeeringConnectionId).Should((Equal(aws.String(peeringConnectionID))))
+						return ec2.CreateRouteRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.CreateRouteOutput{
+								Return: aws.Bool(true),
+							}},
+						}
+					},
+				},
+			},
+			want: want{
+				result: managed.ExternalUpdate{},
 			},
 		},
 	}

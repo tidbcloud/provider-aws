@@ -513,7 +513,6 @@ func (e *external) isInternalVpcPeering(cr *svcapitypes.VPCPeeringConnection) (b
 	if err != nil {
 		return false, err
 	}
-
 	// if requester peering connection acountID same with accepter vpc peering connection, auto-accept it
 	if cr.Spec.ForProvider.PeerOwnerID != nil && acountID == *cr.Spec.ForProvider.PeerOwnerID {
 		return true, nil
