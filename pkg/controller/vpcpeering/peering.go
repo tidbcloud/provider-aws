@@ -12,6 +12,7 @@ import (
 	"github.com/crossplane/provider-aws/pkg/clients/peering"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/event"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
@@ -33,9 +34,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	cpresource "github.com/crossplane/crossplane-runtime/pkg/resource"
-
-	"github.com/aws/aws-sdk-go/aws/awserr"
-
 	awsclient "github.com/crossplane/provider-aws/pkg/clients"
 )
 
@@ -181,7 +179,7 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 
 	// If vpc peering connection status is pending acceptance, modify vpc peering attributes request will failed.
 	// In order to reduce the API request to AWS, return errors early to avoid unnecessary API requests.
-	if existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance {
+	if existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance && !meta.WasDeleted(cr) {
 		return managed.ExternalObservation{ResourceExists: true}, fmt.Errorf(errWaitVpcPeeringConnectionAccept)
 	}
 

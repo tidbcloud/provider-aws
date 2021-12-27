@@ -3,6 +3,7 @@ package vpcpeering
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
 
@@ -231,6 +232,40 @@ func TestObserve(t *testing.T) {
 					ResourceLateInitialized: false,
 				},
 				err: fmt.Errorf(errWaitVpcPeeringConnectionAccept),
+			},
+		},
+		"Deleting": {
+			args: args{
+				kube: &test.MockClient{
+					MockUpdate: test.NewMockClient().Update,
+					MockStatusUpdate: func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return nil
+					},
+				},
+				cr: inDeletingVPCPeerConnection("test"),
+				client: &fake.MockEC2Client{
+					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
+						return ec2.DescribeVpcPeeringConnectionsRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
+								//Attributes: attributes,
+								VpcPeeringConnections: []ec2.VpcPeeringConnection{
+									{
+										Status: &ec2.VpcPeeringConnectionStateReason{
+											Code: ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance,
+										},
+									},
+								},
+							}},
+						}
+					},
+				},
+			},
+			want: want{
+				result: managed.ExternalObservation{
+					ResourceExists:          true,
+					ResourceUpToDate:        false,
+					ResourceLateInitialized: false,
+				},
 			},
 		},
 	}
@@ -640,5 +675,12 @@ func buildVPCPeerConnection(name string) *svcapitypes.VPCPeeringConnection {
 
 	meta.SetExternalName(cr, name)
 
+	return cr
+}
+
+func inDeletingVPCPeerConnection(name string) *svcapitypes.VPCPeeringConnection {
+	cr := buildVPCPeerConnection(name)
+
+	cr.DeletionTimestamp = &v1.Time{time.Now()}
 	return cr
 }
