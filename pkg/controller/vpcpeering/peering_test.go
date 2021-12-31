@@ -3,6 +3,7 @@ package vpcpeering
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
 
@@ -275,6 +276,7 @@ func TestObserve(t *testing.T) {
 					},
 				},
 				acountID: "peerOwner",
+				},
 			},
 			want: want{
 				result: managed.ExternalObservation{
@@ -806,5 +808,12 @@ func buildVPCPeerConnection(name string) *svcapitypes.VPCPeeringConnection {
 
 	meta.SetExternalName(cr, name)
 
+	return cr
+}
+
+func inDeletingVPCPeerConnection(name string) *svcapitypes.VPCPeeringConnection {
+	cr := buildVPCPeerConnection(name)
+
+	cr.DeletionTimestamp = &v1.Time{time.Now()}
 	return cr
 }
