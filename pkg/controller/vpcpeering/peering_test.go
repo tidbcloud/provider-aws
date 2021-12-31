@@ -276,7 +276,6 @@ func TestObserve(t *testing.T) {
 					},
 				},
 				acountID: "peerOwner",
-				},
 			},
 			want: want{
 				result: managed.ExternalObservation{
@@ -287,7 +286,6 @@ func TestObserve(t *testing.T) {
 			},
 		},
 	}
-
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			iamClient := new(iamfake.Client)
