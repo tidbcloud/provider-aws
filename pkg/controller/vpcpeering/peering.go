@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
@@ -17,7 +18,6 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/event"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
-	"github.com/crossplane/crossplane-runtime/pkg/ratelimiter"
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 
@@ -62,13 +62,18 @@ func SetupVPCPeeringConnection(mgr ctrl.Manager, l logging.Logger, rl workqueue.
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter:             ratelimiter.NewDefaultManagedRateLimiter(rl),
+			RateLimiter: workqueue.NewMaxOfRateLimiter(
+				workqueue.NewItemExponentialFailureRateLimiter(10*time.Second, 120*time.Second),
+				rl,
+			),
 			MaxConcurrentReconciles: 1,
 		}).
 		For(&svcapitypes.VPCPeeringConnection{}).
 		Complete(managed.NewReconciler(mgr,
 			resource.ManagedKind(svcapitypes.VPCPeeringConnectionGroupVersionKind),
 			managed.WithExternalConnecter(&connector{kube: mgr.GetClient(), log: l}),
+			// resync interval default is 1 minute, may cause rate limit
+			managed.WithPollInterval(5*time.Minute),
 			managed.WithLogger(l.WithValues("controller", name)),
 			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
