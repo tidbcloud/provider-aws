@@ -55,6 +55,9 @@ const (
 	routeTableEnsured = "tidbcloud.com/route-table-ensured"
 	hostedZoneEnsured = "tidbcloud.com/hosted-zone-ensured"
 	attributeModified = "tidbcloud.com/attribute-modified"
+
+	// The maximum number of results to return with a single call
+	masResults = 100
 )
 
 // SetupVPCPeeringConnection adds a controller that reconciles VPCPeeringConnection.
@@ -486,7 +489,7 @@ func (e *external) addRoute(ctx context.Context, client peering.EC2Client, name 
 	}
 	describeRouteTablesInput := &ec2.DescribeRouteTablesInput{
 		Filters:    []ec2.Filter{filter},
-		MaxResults: aws.Int64(100),
+		MaxResults: aws.Int64(masResults),
 	}
 	routeTablesRes, err := client.DescribeRouteTablesRequest(describeRouteTablesInput).Send(ctx)
 	if err != nil {
@@ -533,7 +536,7 @@ func (e *external) deleteRoute(ctx context.Context, client peering.EC2Client, na
 	}
 	describeRouteTablesInput := &ec2.DescribeRouteTablesInput{
 		Filters:    []ec2.Filter{filter},
-		MaxResults: aws.Int64(100),
+		MaxResults: aws.Int64(masResults),
 	}
 	routeTablesRes, err := client.DescribeRouteTablesRequest(describeRouteTablesInput).Send(ctx)
 	if err != nil {
