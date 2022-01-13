@@ -124,7 +124,6 @@ func (c *connector) Connect(ctx context.Context, mg cpresource.Managed) (managed
 			return nil, err
 		}
 		external.peerClient = peering.NewEc2Client(*peerCfg)
-		external.route53Client = peering.NewRoute53Client(*peerCfg)
 	}
 	return external, nil
 }
@@ -146,14 +145,13 @@ func isUPToDate(conditions []xpv1.Condition) bool {
 }
 
 type external struct {
-	kube              client.Client
-	client            peering.EC2Client
-	route53Client     peering.Route53Client
-	log               logging.Logger
-	stsClient         peering.StsClient
-	peerClient        peering.EC2Client
-	peerRoute53Client peering.Route53Client
-	isInternal        bool
+	kube          client.Client
+	client        peering.EC2Client
+	route53Client peering.Route53Client
+	log           logging.Logger
+	stsClient     peering.StsClient
+	peerClient    peering.EC2Client
+	isInternal    bool
 }
 
 func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.ExternalObservation, error) { // nolint:gocyclo
