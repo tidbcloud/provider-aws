@@ -12,6 +12,7 @@ import (
 
 	"github.com/crossplane/provider-aws/pkg/clients/peering"
 
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
@@ -54,6 +55,9 @@ const (
 	routeTableEnsured = "tidbcloud.com/route-table-ensured"
 	hostedZoneEnsured = "tidbcloud.com/hosted-zone-ensured"
 	attributeModified = "tidbcloud.com/attribute-modified"
+
+	// The maximum number of results to return with a single call
+	masResults = 100
 )
 
 // SetupVPCPeeringConnection adds a controller that reconciles VPCPeeringConnection.
@@ -110,12 +114,26 @@ func (c *connector) Connect(ctx context.Context, mg cpresource.Managed) (managed
 		return nil, err
 	}
 
-	return &external{
+	external := &external{
 		kube:          c.kube,
 		route53Client: peering.NewRoute53Client(*cfg),
 		client:        peering.NewEc2Client(*cfg),
+		stsClient:     peering.NewStsClient(*cfg),
 		log:           c.log,
-	}, nil
+	}
+	isInternal, err := external.isInternalVpcPeering(ctx, cr)
+	if err != nil {
+		return nil, err
+	}
+	if isInternal {
+		external.isInternal = true
+		peerCfg, err := awsclient.GetConfig(ctx, c.kube, mg, *cr.Spec.ForProvider.PeerRegion)
+		if err != nil {
+			return nil, err
+		}
+		external.peerClient = peering.NewEc2Client(*peerCfg)
+	}
+	return external, nil
 }
 
 func isUPToDate(conditions []xpv1.Condition) bool {
@@ -139,6 +157,9 @@ type external struct {
 	client        peering.EC2Client
 	route53Client peering.Route53Client
 	log           logging.Logger
+	stsClient     peering.StsClient
+	peerClient    peering.EC2Client
+	isInternal    bool
 }
 
 func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.ExternalObservation, error) { // nolint:gocyclo
@@ -182,10 +203,21 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 		}
 	}
 
-	// If vpc peering connection status is pending acceptance, modify vpc peering attributes request will failed.
-	// In order to reduce the API request to AWS, return errors early to avoid unnecessary API requests.
 	if existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance && !meta.WasDeleted(cr) {
-		return managed.ExternalObservation{ResourceExists: true}, fmt.Errorf(errWaitVpcPeeringConnectionAccept)
+		// if requester peering connection acountID same with accepter vpc peering connection, auto-accept it
+		if e.isInternal {
+			// accept it when vpc peering connection created
+			if cr.Status.AtProvider.VPCPeeringConnectionID != nil {
+				_, err := e.peerClient.AcceptVpcPeeringConnectionRequest(&ec2.AcceptVpcPeeringConnectionInput{VpcPeeringConnectionId: aws.String(*cr.Status.AtProvider.VPCPeeringConnectionID)}).Send(ctx)
+				if err != nil {
+					return managed.ExternalObservation{ResourceExists: true}, err
+				}
+			}
+		} else {
+			// If vpc peering connection status is pending acceptance, modify vpc peering attributes request will failed.
+			// In order to reduce the API request to AWS, return errors early to avoid unnecessary API requests.
+			return managed.ExternalObservation{ResourceExists: true}, fmt.Errorf(errWaitVpcPeeringConnectionAccept)
+		}
 	}
 
 	_, routeTableReady := cr.GetAnnotations()[routeTableEnsured]
@@ -266,16 +298,28 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 	_, attributeReady := cr.GetAnnotations()[attributeModified]
 
 	if !attributeReady && cr.Status.AtProvider.VPCPeeringConnectionID != nil {
-		modifyVpcPeeringConnectionOptionsInput := &ec2.ModifyVpcPeeringConnectionOptionsInput{
+		_, err := e.client.ModifyVpcPeeringConnectionOptionsRequest(&ec2.ModifyVpcPeeringConnectionOptionsInput{
 			VpcPeeringConnectionId: cr.Status.AtProvider.VPCPeeringConnectionID,
 			RequesterPeeringConnectionOptions: &ec2.PeeringConnectionOptionsRequest{
 				AllowDnsResolutionFromRemoteVpc: aws.Bool(true),
 			},
-		}
-		_, err := e.client.ModifyVpcPeeringConnectionOptionsRequest(modifyVpcPeeringConnectionOptionsInput).Send(ctx)
+		}).Send(ctx)
 		if err != nil {
 			return managed.ExternalUpdate{}, errors.Wrap(err, errModifyVpcPeering)
 		}
+
+		if e.isInternal {
+			_, err := e.peerClient.ModifyVpcPeeringConnectionOptionsRequest(&ec2.ModifyVpcPeeringConnectionOptionsInput{
+				VpcPeeringConnectionId: cr.Status.AtProvider.VPCPeeringConnectionID,
+				AccepterPeeringConnectionOptions: &ec2.PeeringConnectionOptionsRequest{
+					AllowDnsResolutionFromRemoteVpc: aws.Bool(true),
+				},
+			}).Send(ctx)
+			if err != nil {
+				return managed.ExternalUpdate{}, errors.Wrap(err, errModifyVpcPeering)
+			}
+		}
+
 		if cr.Annotations == nil {
 			cr.Annotations = map[string]string{}
 		}
@@ -289,50 +333,18 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 	}
 
 	if !routeTableReady && cr.Status.AtProvider.VPCPeeringConnectionID != nil {
-		filter := ec2.Filter{
-			Name: aws.String("vpc-id"),
-			Values: []string{
-				*cr.Spec.ForProvider.VPCID,
-			},
-		}
-		describeRouteTablesInput := &ec2.DescribeRouteTablesInput{
-			Filters:    []ec2.Filter{filter},
-			MaxResults: aws.Int64(10),
-		}
-		routeTablesRes, err := e.client.DescribeRouteTablesRequest(describeRouteTablesInput).Send(ctx)
+		err := e.addRoute(ctx, e.client, cr.Name, []string{*cr.Spec.ForProvider.VPCID}, *cr.Spec.ForProvider.PeerCIDR, cr.Status.AtProvider.VPCPeeringConnectionID)
 		if err != nil {
-			return managed.ExternalUpdate{}, errors.Wrap(err, errDescribeRouteTable)
+			return managed.ExternalUpdate{}, err
 		}
-
-		e.log.WithValues("VpcPeering", cr.Name).Debug("Describe RouteTables for creating")
-
-		for _, rt := range routeTablesRes.RouteTables {
-			createRouteInput := &ec2.CreateRouteInput{
-				RouteTableId:           rt.RouteTableId,
-				DestinationCidrBlock:   cr.Spec.ForProvider.PeerCIDR,
-				VpcPeeringConnectionId: cr.Status.AtProvider.VPCPeeringConnectionID,
-			}
-			_, err := e.client.CreateRouteRequest(createRouteInput).Send(ctx)
-			if err != nil {
-				// FIXME: The error is not aws.Err type?
-				if !strings.Contains(err.Error(), "RouteAlreadyExists") {
-					return managed.ExternalUpdate{}, errors.Wrap(err, "create route for vpc peering")
-				} else {
-
-					for _, route := range rt.Routes {
-						// The route identified by DestinationCidrBlock, if route table already have DestinationCidrBlock point to other vpc peering connetion ID, should be return error
-						if route.DestinationCidrBlock != nil && *route.DestinationCidrBlock == *cr.Spec.ForProvider.PeerCIDR {
-							if route.VpcPeeringConnectionId != nil && *route.VpcPeeringConnectionId == *cr.Status.AtProvider.VPCPeeringConnectionID {
-								e.log.WithValues("VpcPeering", cr.Name).Debug("Route already exist, no need to recreate", "RouteTableId", rt.RouteTableId, "DestinationCidrBlock", *route.DestinationCidrBlock)
-								continue
-							} else {
-								return managed.ExternalUpdate{}, errors.Wrap(err, fmt.Sprintf("failed add route for vpc peering connection: %s, routeID: %s", *cr.Status.AtProvider.VPCPeeringConnectionID, *rt.RouteTableId))
-							}
-						}
-					}
+		if e.isInternal {
+			if cr.Status.AtProvider.RequesterVPCInfo != nil && cr.Status.AtProvider.RequesterVPCInfo.CIDRBlock != nil {
+				err := e.addRoute(ctx, e.peerClient, cr.Name, []string{*cr.Spec.ForProvider.PeerVPCID}, *cr.Status.AtProvider.RequesterVPCInfo.CIDRBlock, cr.Status.AtProvider.VPCPeeringConnectionID)
+				if err != nil {
+					return managed.ExternalUpdate{}, err
 				}
 			} else {
-				e.log.WithValues("VpcPeering", cr.Name).Debug("Create Route successful", "RouteTableId", rt.RouteTableId)
+				return managed.ExternalUpdate{}, fmt.Errorf("requester vpc cidr is null")
 			}
 		}
 		if cr.Annotations == nil {
@@ -404,33 +416,19 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 	}
 	e.log.WithValues("VpcPeering", cr.Name).Debug("Delete VPCAssociationAuthorization successful")
 
-	filter := ec2.Filter{
-		Name: aws.String("vpc-id"),
-		Values: []string{
-			*cr.Spec.ForProvider.VPCID,
-		},
-	}
-	describeRouteTablesInput := &ec2.DescribeRouteTablesInput{
-		Filters: []ec2.Filter{filter},
-	}
-	routeTablesRes, err := e.client.DescribeRouteTablesRequest(describeRouteTablesInput).Send(ctx)
-	if err != nil {
-		return errors.Wrap(err, "describe RouteTables")
-	}
-
-	e.log.WithValues("VpcPeering", cr.Name).Debug("Describe RouteTables for deleting", "result", routeTablesRes.String())
-	for _, rt := range routeTablesRes.RouteTables {
-		for _, r := range rt.Routes {
-			if r.VpcPeeringConnectionId != nil && cr.Status.AtProvider.VPCPeeringConnectionID != nil && *r.VpcPeeringConnectionId == *cr.Status.AtProvider.VPCPeeringConnectionID {
-				_, err := e.client.DeleteRouteRequest(&ec2.DeleteRouteInput{
-					DestinationCidrBlock: cr.Spec.ForProvider.PeerCIDR,
-
-					RouteTableId: rt.RouteTableId,
-				}).Send(ctx)
+	if cr.Status.AtProvider.VPCPeeringConnectionID != nil {
+		err := e.deleteRoute(ctx, e.client, cr.Name, []string{*cr.Spec.ForProvider.VPCID}, *cr.Spec.ForProvider.PeerCIDR, cr.Status.AtProvider.VPCPeeringConnectionID)
+		if err != nil {
+			return err
+		}
+		if e.isInternal {
+			if cr.Status.AtProvider.RequesterVPCInfo != nil && cr.Status.AtProvider.RequesterVPCInfo.CIDRBlock != nil {
+				err := e.deleteRoute(ctx, e.peerClient, cr.Name, []string{*cr.Spec.ForProvider.PeerVPCID}, *cr.Status.AtProvider.RequesterVPCInfo.CIDRBlock, cr.Status.AtProvider.VPCPeeringConnectionID)
 				if err != nil {
-					return errors.Wrap(err, "delete Route")
+					return err
 				}
-				e.log.WithValues("VpcPeering", cr.Name).Debug("Delete route successful", "RouteTableId", rt.RouteTableId)
+			} else {
+				return fmt.Errorf("requester vpc cidr is null")
 			}
 		}
 	}
@@ -467,5 +465,99 @@ func (e *external) deleteVPCPeeringConnection(ctx context.Context, cr *svcapityp
 		}
 	}
 
+	return nil
+}
+
+func (e *external) isInternalVpcPeering(ctx context.Context, cr *svcapitypes.VPCPeeringConnection) (bool, error) {
+	input := &sts.GetCallerIdentityInput{}
+	res, err := e.stsClient.GetCallerIdentityRequest(input).Send(ctx)
+	if err != nil {
+		return false, err
+	}
+	// if requester peering connection acountID same with accepter vpc peering connection, auto-accept it
+	if cr.Spec.ForProvider.PeerOwnerID != nil && res.Account != nil && *res.Account == *cr.Spec.ForProvider.PeerOwnerID {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (e *external) addRoute(ctx context.Context, client peering.EC2Client, name string, vpcIDs []string, peerCIDR string, pcx *string) error {
+	filter := ec2.Filter{
+		Name:   aws.String("vpc-id"),
+		Values: vpcIDs,
+	}
+	describeRouteTablesInput := &ec2.DescribeRouteTablesInput{
+		Filters:    []ec2.Filter{filter},
+		MaxResults: aws.Int64(masResults),
+	}
+	routeTablesRes, err := client.DescribeRouteTablesRequest(describeRouteTablesInput).Send(ctx)
+	if err != nil {
+		return errors.Wrap(err, errDescribeRouteTable)
+	}
+
+	e.log.WithValues("VpcPeering", name).Debug("Describe RouteTables for creating")
+
+	for _, rt := range routeTablesRes.RouteTables {
+		createRouteInput := &ec2.CreateRouteInput{
+			RouteTableId:           rt.RouteTableId,
+			DestinationCidrBlock:   aws.String(peerCIDR),
+			VpcPeeringConnectionId: pcx,
+		}
+		_, err := client.CreateRouteRequest(createRouteInput).Send(ctx)
+		if err != nil {
+			// FIXME: The error is not aws.Err type?
+			if !strings.Contains(err.Error(), "RouteAlreadyExists") {
+				return errors.Wrap(err, "create route for vpc peering")
+			} else {
+				for _, route := range rt.Routes {
+					// The route identified by DestinationCidrBlock, if route table already have DestinationCidrBlock point to other vpc peering connetion ID, should be return error
+					if route.DestinationCidrBlock != nil && *route.DestinationCidrBlock == peerCIDR {
+						if route.VpcPeeringConnectionId != nil && *route.VpcPeeringConnectionId == *pcx {
+							e.log.WithValues("VpcPeering", name).Debug("Route already exist, no need to recreate", "RouteTableId", rt.RouteTableId, "DestinationCidrBlock", *route.DestinationCidrBlock)
+							continue
+						} else {
+							return errors.Wrap(err, fmt.Sprintf("failed add route for vpc peering connection: %s, routeID: %s", *pcx, *rt.RouteTableId))
+						}
+					}
+				}
+			}
+		} else {
+			e.log.WithValues("VpcPeering", name).Debug("Create Route successful", "RouteTableId", rt.RouteTableId)
+		}
+	}
+	return nil
+}
+
+func (e *external) deleteRoute(ctx context.Context, client peering.EC2Client, name string, vpcIDs []string, peerCIDR string, pcx *string) error {
+	filter := ec2.Filter{
+		Name:   aws.String("vpc-id"),
+		Values: vpcIDs,
+	}
+	describeRouteTablesInput := &ec2.DescribeRouteTablesInput{
+		Filters:    []ec2.Filter{filter},
+		MaxResults: aws.Int64(masResults),
+	}
+	routeTablesRes, err := client.DescribeRouteTablesRequest(describeRouteTablesInput).Send(ctx)
+	if err != nil {
+		return errors.Wrap(err, "describe RouteTables")
+	}
+
+	e.log.WithValues("VpcPeering", name).Debug("Describe RouteTables for deleting", "result", routeTablesRes.String())
+	for _, rt := range routeTablesRes.RouteTables {
+		for _, r := range rt.Routes {
+			if r.VpcPeeringConnectionId != nil && pcx != nil && *r.VpcPeeringConnectionId == *pcx {
+				_, err := e.client.DeleteRouteRequest(&ec2.DeleteRouteInput{
+					DestinationCidrBlock: aws.String(peerCIDR),
+
+					RouteTableId: rt.RouteTableId,
+				}).Send(ctx)
+				if err != nil {
+					return errors.Wrap(err, "delete Route")
+				}
+				e.log.WithValues("VpcPeering", name).Debug("Delete route successful", "RouteTableId", rt.RouteTableId)
+			}
+		}
+	}
 	return nil
 }

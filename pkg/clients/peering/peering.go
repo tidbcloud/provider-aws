@@ -2,6 +2,7 @@ package peering
 
 import (
 	"github.com/aws/aws-sdk-go-v2/service/route53"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	aws "github.com/crossplane/provider-aws/pkg/clients"
 
@@ -236,6 +237,8 @@ type EC2Client interface {
 	ModifyVpcPeeringConnectionOptionsRequest(*ec2.ModifyVpcPeeringConnectionOptionsInput) ec2.ModifyVpcPeeringConnectionOptionsRequest
 	// DeleteVpcPeeringConnectionRequest delete vpc peering
 	DeleteVpcPeeringConnectionRequest(*ec2.DeleteVpcPeeringConnectionInput) ec2.DeleteVpcPeeringConnectionRequest
+	// AcceptVpcPeeringConnectionRequest accept vpc peering connection
+	AcceptVpcPeeringConnectionRequest(*ec2.AcceptVpcPeeringConnectionInput) ec2.AcceptVpcPeeringConnectionRequest
 }
 
 // NewEc2Client create ec2 client
@@ -252,4 +255,12 @@ func NewRoute53Client(cfg sdkaws.Config) Route53Client {
 type Route53Client interface {
 	CreateVPCAssociationAuthorizationRequest(*route53.CreateVPCAssociationAuthorizationInput) route53.CreateVPCAssociationAuthorizationRequest
 	DeleteVPCAssociationAuthorizationRequest(*route53.DeleteVPCAssociationAuthorizationInput) route53.DeleteVPCAssociationAuthorizationRequest
+}
+
+type StsClient interface {
+	GetCallerIdentityRequest(*sts.GetCallerIdentityInput) sts.GetCallerIdentityRequest
+}
+
+func NewStsClient(cfg sdkaws.Config) StsClient {
+	return sts.New(cfg)
 }

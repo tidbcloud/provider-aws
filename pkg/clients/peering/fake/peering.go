@@ -24,6 +24,8 @@ type MockEC2Client struct {
 	DeleteVpcPeeringConnectionRequestFun func(input *ec2.DeleteVpcPeeringConnectionInput) ec2.DeleteVpcPeeringConnectionRequest
 	// CreateTagsRequestFun
 	CreateTagsRequestFun func(input *ec2.CreateTagsInput) ec2.CreateTagsRequest
+	// AcceptVpcPeeringConnectionRequestFun
+	AcceptVpcPeeringConnectionRequestFun func(*ec2.AcceptVpcPeeringConnectionInput) ec2.AcceptVpcPeeringConnectionRequest
 }
 
 // CreateRouteRequest create route request
@@ -64,6 +66,11 @@ func (m *MockEC2Client) DeleteVpcPeeringConnectionRequest(input *ec2.DeleteVpcPe
 // CreateTagsRequest create tags
 func (m *MockEC2Client) CreateTagsRequest(input *ec2.CreateTagsInput) ec2.CreateTagsRequest {
 	return m.CreateTagsRequestFun(input)
+}
+
+// AcceptVpcPeeringConnectionRequest accept vpc peering connection
+func (m *MockEC2Client) AcceptVpcPeeringConnectionRequest(input *ec2.AcceptVpcPeeringConnectionInput) ec2.AcceptVpcPeeringConnectionRequest {
+	return m.AcceptVpcPeeringConnectionRequestFun(input)
 }
 
 // MockRoute53Client route53 client
