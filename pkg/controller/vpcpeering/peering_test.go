@@ -27,7 +27,6 @@ import (
 	svcapitypes "github.com/crossplane/provider-aws/apis/vpcpeering/v1alpha1"
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	iamfake "github.com/crossplane/provider-aws/pkg/clients/iam/fake"
 	"github.com/crossplane/provider-aws/pkg/clients/peering/fake"
 	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/gomega"
@@ -40,9 +39,10 @@ var log = logging.NewLogrLogger(zap.New(zap.UseDevMode(true)).WithName("vpcpeeri
 type args struct {
 	kube       client.Client
 	client     peering.EC2Client
+	peerClient peering.EC2Client
 	route53Cli peering.Route53Client
 	cr         *svcapitypes.VPCPeeringConnection
-	acountID   string
+	isInternal bool
 }
 
 func TestObserve(t *testing.T) {
@@ -302,6 +302,8 @@ func TestObserve(t *testing.T) {
 							}},
 						}
 					},
+				},
+				peerClient: &fake.MockEC2Client{
 					AcceptVpcPeeringConnectionRequestFun: func(input *ec2.AcceptVpcPeeringConnectionInput) ec2.AcceptVpcPeeringConnectionRequest {
 						g.Expect(*input.VpcPeeringConnectionId).Should(Equal("peerConnectionID"))
 						return ec2.AcceptVpcPeeringConnectionRequest{
@@ -309,7 +311,7 @@ func TestObserve(t *testing.T) {
 						}
 					},
 				},
-				acountID: "peerOwner",
+				isInternal: true,
 			},
 			want: want{
 				result: managed.ExternalObservation{
@@ -322,15 +324,13 @@ func TestObserve(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			iamClient := new(iamfake.Client)
-			iamClient.On("GetAccountID").Return(tc.acountID, nil)
-
 			e := &external{
 				client:        tc.client,
 				kube:          tc.kube,
 				route53Client: tc.route53Cli,
 				log:           log,
-				iamClient:     iamClient,
+				isInternal:    tc.isInternal,
+				peerClient:    tc.peerClient,
 			}
 
 			o, err := e.Observe(context.Background(), tc.args.cr)
@@ -435,6 +435,13 @@ func TestCreate(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	g := NewGomegaWithT(t)
+	var peeringConnectionID = "my-peering-id"
+	pc := buildVPCPeerConnection("test")
+	pc.Spec.ForProvider.PeerCIDR = aws.String("10.0.0.0/8")
+	pc.Status.AtProvider.VPCPeeringConnectionID = aws.String(peeringConnectionID)
+	pc.Status.AtProvider.RequesterVPCInfo = &svcapitypes.VPCPeeringConnectionVPCInfo{
+		CIDRBlock: aws.String("196.168.0.0/16"),
+	}
 
 	type want struct {
 		err error
@@ -460,7 +467,7 @@ func TestDelete(t *testing.T) {
 						}
 					},
 				},
-				cr: buildVPCPeerConnection("test"),
+				cr: pc.DeepCopy(),
 				client: &fake.MockEC2Client{
 					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
 						return ec2.DescribeRouteTablesRequest{
@@ -504,7 +511,7 @@ func TestDelete(t *testing.T) {
 		},
 		"InternalPeering": {
 			args: args{
-				acountID: "peerOwner",
+				isInternal: true,
 				kube: &test.MockClient{
 					MockDelete: test.NewMockClient().Delete,
 				},
@@ -519,14 +526,28 @@ func TestDelete(t *testing.T) {
 						}
 					},
 				},
-				cr: buildVPCPeerConnection("test"),
+				cr: pc.DeepCopy(),
 				client: &fake.MockEC2Client{
 					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
-						g.Expect(input.Filters[0].Values).Should(Equal([]string{"ownerVpc", "peerVpc"}))
+						g.Expect(len(input.Filters)).Should(Equal(1))
+						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
+						g.Expect(input.Filters[0].Values).Should((Equal([]string{"ownerVpc"})))
+
 						return ec2.DescribeRouteTablesRequest{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
-								RouteTables: make([]ec2.RouteTable, 0),
+								RouteTables: []ec2.RouteTable{
+									{
+										RouteTableId: aws.String("rt1"),
+									},
+								},
 							}},
+						}
+					},
+					DeleteRouteRequestFun: func(input *ec2.DeleteRouteInput) ec2.DeleteRouteRequest {
+						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt1"))))
+						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("10.0.0.0/8"))))
+						return ec2.DeleteRouteRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DeleteRouteOutput{}},
 						}
 					},
 					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
@@ -557,6 +578,30 @@ func TestDelete(t *testing.T) {
 						}
 					},
 				},
+				peerClient: &fake.MockEC2Client{
+					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+						g.Expect(len(input.Filters)).Should(Equal(1))
+						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
+						g.Expect(input.Filters[0].Values).Should((Equal([]string{"peerVpc"})))
+
+						return ec2.DescribeRouteTablesRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
+								RouteTables: []ec2.RouteTable{
+									{
+										RouteTableId: aws.String("rt2"),
+									},
+								},
+							}},
+						}
+					},
+					DeleteRouteRequestFun: func(input *ec2.DeleteRouteInput) ec2.DeleteRouteRequest {
+						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt2"))))
+						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("196.168.0.0/16"))))
+						return ec2.DeleteRouteRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DeleteRouteOutput{}},
+						}
+					},
+				},
 			},
 			want: want{
 				err: nil,
@@ -566,14 +611,13 @@ func TestDelete(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			iamClient := new(iamfake.Client)
-			iamClient.On("GetAccountID").Return(tc.acountID, nil)
 			e := &external{
 				client:        tc.client,
 				kube:          tc.kube,
 				route53Client: tc.route53Cli,
 				log:           log,
-				iamClient:     iamClient,
+				isInternal:    tc.isInternal,
+				peerClient:    tc.peerClient,
 			}
 
 			err := e.Delete(context.Background(), tc.args.cr)
@@ -595,6 +639,9 @@ func TestUpdateRouteTable(t *testing.T) {
 	pc.Annotations[hostedZoneEnsured] = "true"
 	pc.Spec.ForProvider.PeerCIDR = aws.String("10.0.0.0/8")
 	pc.Status.AtProvider.VPCPeeringConnectionID = aws.String(peeringConnectionID)
+	pc.Status.AtProvider.RequesterVPCInfo = &svcapitypes.VPCPeeringConnectionVPCInfo{
+		CIDRBlock: aws.String("196.168.0.0/16"),
+	}
 	type want struct {
 		result managed.ExternalUpdate
 		err    error
@@ -749,7 +796,7 @@ func TestUpdateRouteTable(t *testing.T) {
 		},
 		"Create route when internal vpc peering": {
 			args: args{
-				acountID: "peerOwner",
+				isInternal: true,
 				kube: &test.MockClient{
 					MockUpdate: test.NewMockClient().Update,
 					MockStatusUpdate: func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
@@ -762,8 +809,8 @@ func TestUpdateRouteTable(t *testing.T) {
 					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
 						g.Expect(len(input.Filters)).Should(Equal(1))
 						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
-						// will describe requester and accepter vpc ID when internal vpc peering
-						g.Expect(input.Filters[0].Values).Should((Equal([]string{"ownerVpc", "peerVpc"})))
+						g.Expect(input.Filters[0].Values).Should((Equal([]string{"ownerVpc"})))
+
 						return ec2.DescribeRouteTablesRequest{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
 								RouteTables: []ec2.RouteTable{
@@ -785,6 +832,33 @@ func TestUpdateRouteTable(t *testing.T) {
 						}
 					},
 				},
+				peerClient: &fake.MockEC2Client{
+					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+						g.Expect(len(input.Filters)).Should(Equal(1))
+						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
+						g.Expect(input.Filters[0].Values).Should((Equal([]string{"peerVpc"})))
+
+						return ec2.DescribeRouteTablesRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
+								RouteTables: []ec2.RouteTable{
+									{
+										RouteTableId: aws.String("rt2"),
+									},
+								},
+							}},
+						}
+					},
+					CreateRouteRequestFun: func(input *ec2.CreateRouteInput) ec2.CreateRouteRequest {
+						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt2"))))
+						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("196.168.0.0/16"))))
+						g.Expect(input.VpcPeeringConnectionId).Should((Equal(aws.String(peeringConnectionID))))
+						return ec2.CreateRouteRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.CreateRouteOutput{
+								Return: aws.Bool(true),
+							}},
+						}
+					},
+				},
 			},
 			want: want{
 				result: managed.ExternalUpdate{},
@@ -794,14 +868,13 @@ func TestUpdateRouteTable(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			iamClient := new(iamfake.Client)
-			iamClient.On("GetAccountID").Return(tc.acountID, nil)
 			e := &external{
 				client:        tc.client,
+				peerClient:    tc.peerClient,
 				kube:          tc.kube,
 				route53Client: tc.route53Cli,
 				log:           log,
-				iamClient:     iamClient,
+				isInternal:    tc.isInternal,
 			}
 			result, err := e.Update(context.Background(), tc.args.cr)
 			if tc.want.err != nil {

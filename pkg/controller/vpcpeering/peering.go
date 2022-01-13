@@ -292,11 +292,6 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 	_, hostZoneReady := cr.GetAnnotations()[hostedZoneEnsured]
 	_, attributeReady := cr.GetAnnotations()[attributeModified]
 
-	isInternal, err := e.isInternalVpcPeering(ctx, cr)
-	if err != nil {
-		return managed.ExternalUpdate{}, err
-	}
-
 	if !attributeReady && cr.Status.AtProvider.VPCPeeringConnectionID != nil {
 		_, err := e.client.ModifyVpcPeeringConnectionOptionsRequest(&ec2.ModifyVpcPeeringConnectionOptionsInput{
 			VpcPeeringConnectionId: cr.Status.AtProvider.VPCPeeringConnectionID,
@@ -308,7 +303,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 			return managed.ExternalUpdate{}, errors.Wrap(err, errModifyVpcPeering)
 		}
 
-		if isInternal {
+		if e.isInternal {
 			_, err := e.peerClient.ModifyVpcPeeringConnectionOptionsRequest(&ec2.ModifyVpcPeeringConnectionOptionsInput{
 				VpcPeeringConnectionId: cr.Status.AtProvider.VPCPeeringConnectionID,
 				AccepterPeeringConnectionOptions: &ec2.PeeringConnectionOptionsRequest{
@@ -338,7 +333,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 			return managed.ExternalUpdate{}, err
 		}
 		if e.isInternal {
-			if cr.Status.AtProvider.RequesterVPCInfo.CIDRBlock != nil {
+			if cr.Status.AtProvider.RequesterVPCInfo != nil && cr.Status.AtProvider.RequesterVPCInfo.CIDRBlock != nil {
 				err := e.addRoute(ctx, e.peerClient, cr.Name, []string{*cr.Spec.ForProvider.PeerVPCID}, *cr.Status.AtProvider.RequesterVPCInfo.CIDRBlock, cr.Status.AtProvider.VPCPeeringConnectionID)
 				if err != nil {
 					return managed.ExternalUpdate{}, err
@@ -422,13 +417,13 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 			return err
 		}
 		if e.isInternal {
-			if cr.Status.AtProvider.RequesterVPCInfo.CIDRBlock != nil {
+			if cr.Status.AtProvider.RequesterVPCInfo != nil && cr.Status.AtProvider.RequesterVPCInfo.CIDRBlock != nil {
 				err := e.deleteRoute(ctx, e.peerClient, cr.Name, []string{*cr.Spec.ForProvider.PeerVPCID}, *cr.Status.AtProvider.RequesterVPCInfo.CIDRBlock, cr.Status.AtProvider.VPCPeeringConnectionID)
 				if err != nil {
 					return err
 				}
 			} else {
-				fmt.Errorf("requester vpc cidr is null")
+				return fmt.Errorf("requester vpc cidr is null")
 			}
 		}
 	}
