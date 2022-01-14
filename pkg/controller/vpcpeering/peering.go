@@ -187,7 +187,12 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 
 	existedPeer := resp.VpcPeeringConnections[0]
 
-	if !(existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeInitiatingRequest || existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance || existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeActive || existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeExpired || existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeRejected) {
+	if !(existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeInitiatingRequest ||
+		existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance ||
+		existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeActive ||
+		existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeExpired ||
+		existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeRejected ||
+		existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeFailed) {
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
@@ -201,6 +206,15 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 		if err := e.kube.Status().Update(ctx, cr); err != nil {
 			return managed.ExternalObservation{ResourceExists: true}, err
 		}
+	}
+
+	if existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeRejected || existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeFailed {
+		cr.Status.SetConditions(xpv1.Unavailable())
+		// TODO: Actually we don't need to reconcile this object, but the crossplane runtime cannot forgot it from queue.
+		// Fortunately AWS has an expiration time，it will eventually be removed
+		return managed.ExternalObservation{
+			ResourceExists: true,
+		}, errors.Wrap(e.kube.Status().Update(ctx, cr), errUpdateManagedStatus)
 	}
 
 	if existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance && !meta.WasDeleted(cr) {
