@@ -32,6 +32,11 @@ func GenerateDescribeVpcPeeringConnectionsInput(cr *svcapitypes.VPCPeeringConnec
 					string(ec2.VpcPeeringConnectionStateReasonCodeActive),
 					string(ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance),
 					string(ec2.VpcPeeringConnectionStateReasonCodeProvisioning),
+					// If the vpc id does not exist, the status of the vpc peering connection will become failed.
+					// Describe result should contains failed vpc peering connection, otherwise the controller will always create peering and eventually api throttling
+					string(ec2.VpcPeeringConnectionStateReasonCodeFailed),
+					// If peer vpc reject connection, we should not create it again.
+					string(ec2.VpcPeeringConnectionStateReasonCodeRejected),
 				},
 			},
 		},
