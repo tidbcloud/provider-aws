@@ -24,9 +24,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 
-	svcapitypes "github.com/crossplane/provider-aws/apis/vpcpeering/v1alpha1"
-
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
+	svcapitypes "github.com/crossplane/provider-aws/apis/vpcpeering/v1alpha1"
 	"github.com/crossplane/provider-aws/pkg/clients/peering/fake"
 	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/gomega"
@@ -48,8 +48,9 @@ type args struct {
 func TestObserve(t *testing.T) {
 	g := NewGomegaWithT(t)
 	type want struct {
-		result managed.ExternalObservation
-		err    error
+		result       managed.ExternalObservation
+		err          error
+		expectStatus *svcapitypes.VPCPeeringConnectionStatus
 	}
 
 	cases := map[string]struct {
@@ -218,13 +219,6 @@ func TestObserve(t *testing.T) {
 							}},
 						}
 					},
-					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
-						return ec2.DescribeRouteTablesRequest{
-							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
-								RouteTables: make([]ec2.RouteTable, 0),
-							}},
-						}
-					},
 				},
 			},
 			want: want{
@@ -321,6 +315,94 @@ func TestObserve(t *testing.T) {
 				},
 			},
 		},
+		"Failed": {
+			args: args{
+				kube: &test.MockClient{
+					MockUpdate: test.NewMockClient().Update,
+					MockStatusUpdate: func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return nil
+					},
+				},
+				cr: buildVPCPeerConnection("test"),
+				client: &fake.MockEC2Client{
+					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
+						return ec2.DescribeVpcPeeringConnectionsRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
+								VpcPeeringConnections: []ec2.VpcPeeringConnection{
+									{
+										Status: &ec2.VpcPeeringConnectionStateReason{
+											Code: ec2.VpcPeeringConnectionStateReasonCodeFailed,
+										},
+										VpcPeeringConnectionId: aws.String("peerConnectionID"),
+									},
+								},
+							}},
+						}
+					},
+				},
+			},
+			want: want{
+				result: managed.ExternalObservation{
+					ResourceExists:          true,
+					ResourceUpToDate:        false,
+					ResourceLateInitialized: false,
+				},
+				expectStatus: &svcapitypes.VPCPeeringConnectionStatus{
+					ResourceStatus: xpv1.ResourceStatus{ConditionedStatus: xpv1.ConditionedStatus{Conditions: []xpv1.Condition{
+						xpv1.Unavailable(),
+					}}},
+					AtProvider: svcapitypes.VPCPeeringConnectionObservation{
+						Status:                 &svcapitypes.VPCPeeringConnectionStateReason{Code: aws.String("failed")},
+						VPCPeeringConnectionID: aws.String("peerConnectionID"),
+					},
+				},
+				err: fmt.Errorf("Peering peerConnectionID is not active"),
+			},
+		},
+		"Rejected": {
+			args: args{
+				kube: &test.MockClient{
+					MockUpdate: test.NewMockClient().Update,
+					MockStatusUpdate: func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return nil
+					},
+				},
+				cr: buildVPCPeerConnection("test"),
+				client: &fake.MockEC2Client{
+					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
+						return ec2.DescribeVpcPeeringConnectionsRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
+								VpcPeeringConnections: []ec2.VpcPeeringConnection{
+									{
+										Status: &ec2.VpcPeeringConnectionStateReason{
+											Code: ec2.VpcPeeringConnectionStateReasonCodeRejected,
+										},
+										VpcPeeringConnectionId: aws.String("peerConnectionID"),
+									},
+								},
+							}},
+						}
+					},
+				},
+			},
+			want: want{
+				result: managed.ExternalObservation{
+					ResourceExists:          true,
+					ResourceUpToDate:        false,
+					ResourceLateInitialized: false,
+				},
+				expectStatus: &svcapitypes.VPCPeeringConnectionStatus{
+					ResourceStatus: xpv1.ResourceStatus{ConditionedStatus: xpv1.ConditionedStatus{Conditions: []xpv1.Condition{
+						xpv1.Unavailable(),
+					}}},
+					AtProvider: svcapitypes.VPCPeeringConnectionObservation{
+						Status:                 &svcapitypes.VPCPeeringConnectionStateReason{Code: aws.String("rejected")},
+						VPCPeeringConnectionID: aws.String("peerConnectionID"),
+					},
+				},
+				err: fmt.Errorf("Peering peerConnectionID is not active"),
+			},
+		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -341,6 +423,11 @@ func TestObserve(t *testing.T) {
 
 			if diff := cmp.Diff(tc.want.result, o); diff != "" {
 				t.Errorf("r: -want, +got:\n%s", diff)
+			}
+			if tc.want.expectStatus != nil {
+				if diff := cmp.Diff(*tc.want.expectStatus, tc.cr.Status); diff != "" {
+					t.Errorf("r: -want, +got:\n%s", diff)
+				}
 			}
 		})
 	}
