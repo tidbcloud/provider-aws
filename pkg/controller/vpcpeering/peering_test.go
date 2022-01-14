@@ -356,6 +356,7 @@ func TestObserve(t *testing.T) {
 						VPCPeeringConnectionID: aws.String("peerConnectionID"),
 					},
 				},
+				err: fmt.Errorf("Peering peerConnectionID is not active"),
 			},
 		},
 		"Rejected": {
@@ -399,6 +400,7 @@ func TestObserve(t *testing.T) {
 						VPCPeeringConnectionID: aws.String("peerConnectionID"),
 					},
 				},
+				err: fmt.Errorf("Peering peerConnectionID is not active"),
 			},
 		},
 	}

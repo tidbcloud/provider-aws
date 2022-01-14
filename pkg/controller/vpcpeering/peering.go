@@ -210,11 +210,18 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 
 	if existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeRejected || existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeFailed {
 		cr.Status.SetConditions(xpv1.Unavailable())
+		err := e.kube.Status().Update(ctx, cr)
+		if err != nil {
+			return managed.ExternalObservation{
+				ResourceExists: true,
+			}, err
+		}
 		// TODO: Actually we don't need to reconcile this object, but the crossplane runtime cannot forgot it from queue.
 		// Fortunately AWS has an expiration time，it will eventually be removed
 		return managed.ExternalObservation{
 			ResourceExists: true,
-		}, errors.Wrap(e.kube.Status().Update(ctx, cr), errUpdateManagedStatus)
+			// Peering options can be added only to active peerings. so we need not call Update function
+		}, fmt.Errorf("Peering %s is not active", *existedPeer.VpcPeeringConnectionId)
 	}
 
 	if existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance && !meta.WasDeleted(cr) {
