@@ -50,7 +50,7 @@ func (in *RequestPaymentConfigurationClient) Observe(ctx context.Context, bucket
 		// If the payer configuration is not set, do not check
 		return Updated, nil
 	}
-	external, err := in.client.GetBucketRequestPaymentRequest(&awss3.GetBucketRequestPaymentInput{Bucket: awsclient.String(meta.GetExternalName(bucket))}).Send(ctx)
+	external, err := in.client.GetBucketRequestPayment(ctx, &awss3.GetBucketRequestPaymentInput{Bucket: awsclient.String(meta.GetExternalName(bucket))})
 	if err != nil {
 		return NeedsUpdate, awsclient.Wrap(err, paymentGetFailed)
 	}

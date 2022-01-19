@@ -1,6 +1,8 @@
 package fake
 
 import (
+	"context"
+
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 
 	"github.com/aws/aws-sdk-go-v2/service/route53"
@@ -9,84 +11,84 @@ import (
 // MockEC2Client mock ec2 client
 type MockEC2Client struct {
 	// DescribeVpcPeeringConnectionsRequestFun
-	DescribeVpcPeeringConnectionsRequestFun func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest
+	DescribeVpcPeeringConnectionsRequestFun func(ctx context.Context, input *ec2.DescribeVpcPeeringConnectionsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcPeeringConnectionsOutput, error)
 	// CreateVpcPeeringConnectionRequestFun
-	CreateVpcPeeringConnectionRequestFun func(input *ec2.CreateVpcPeeringConnectionInput) ec2.CreateVpcPeeringConnectionRequest
+	CreateVpcPeeringConnectionRequestFun func(ctx context.Context, input *ec2.CreateVpcPeeringConnectionInput, opts ...func(*ec2.Options)) (*ec2.CreateVpcPeeringConnectionOutput, error)
 	// CreateRouteRequestFun
-	CreateRouteRequestFun func(input *ec2.CreateRouteInput) ec2.CreateRouteRequest
+	CreateRouteRequestFun func(ctx context.Context, input *ec2.CreateRouteInput, opts ...func(*ec2.Options)) (*ec2.CreateRouteOutput, error)
 	// DescribeRouteTablesRequestFun
-	DescribeRouteTablesRequestFun func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest
+	DescribeRouteTablesRequestFun func(ctx context.Context, input *ec2.DescribeRouteTablesInput, opts ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error)
 	// DeleteRouteRequestFun
-	DeleteRouteRequestFun func(input *ec2.DeleteRouteInput) ec2.DeleteRouteRequest
+	DeleteRouteRequestFun func(ctx context.Context, input *ec2.DeleteRouteInput, opts ...func(*ec2.Options)) (*ec2.DeleteRouteOutput, error)
 	// ModifyVpcPeeringConnectionOptionsRequestFun
-	ModifyVpcPeeringConnectionOptionsRequestFun func(input *ec2.ModifyVpcPeeringConnectionOptionsInput) ec2.ModifyVpcPeeringConnectionOptionsRequest
+	ModifyVpcPeeringConnectionOptionsRequestFun func(ctx context.Context, input *ec2.ModifyVpcPeeringConnectionOptionsInput, opts ...func(*ec2.Options)) (*ec2.ModifyVpcPeeringConnectionOptionsOutput, error)
 	// DeleteVpcPeeringConnectionRequestFun
-	DeleteVpcPeeringConnectionRequestFun func(input *ec2.DeleteVpcPeeringConnectionInput) ec2.DeleteVpcPeeringConnectionRequest
+	DeleteVpcPeeringConnectionRequestFun func(ctx context.Context, input *ec2.DeleteVpcPeeringConnectionInput, opts ...func(*ec2.Options)) (*ec2.DeleteVpcPeeringConnectionOutput, error)
 	// CreateTagsRequestFun
-	CreateTagsRequestFun func(input *ec2.CreateTagsInput) ec2.CreateTagsRequest
+	CreateTagsRequestFun func(ctx context.Context, input *ec2.CreateTagsInput, opts ...func(*ec2.Options)) (*ec2.CreateTagsOutput, error)
 	// AcceptVpcPeeringConnectionRequestFun
-	AcceptVpcPeeringConnectionRequestFun func(*ec2.AcceptVpcPeeringConnectionInput) ec2.AcceptVpcPeeringConnectionRequest
+	AcceptVpcPeeringConnectionRequestFun func(ctx context.Context, input *ec2.AcceptVpcPeeringConnectionInput, opts ...func(*ec2.Options)) (*ec2.AcceptVpcPeeringConnectionOutput, error)
 }
 
-// CreateRouteRequest create route request
-func (m *MockEC2Client) CreateRouteRequest(input *ec2.CreateRouteInput) ec2.CreateRouteRequest {
-	return m.CreateRouteRequestFun(input)
+// CreateRoute create route request
+func (m *MockEC2Client) CreateRoute(ctx context.Context, input *ec2.CreateRouteInput, opts ...func(*ec2.Options)) (*ec2.CreateRouteOutput, error) {
+	return m.CreateRouteRequestFun(ctx, input)
 }
 
-// DescribeVpcPeeringConnectionsRequest describe vpc peering connection
-func (m *MockEC2Client) DescribeVpcPeeringConnectionsRequest(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
-	return m.DescribeVpcPeeringConnectionsRequestFun(input)
+// DescribeVpcPeeringConnections describe vpc peering connection
+func (m *MockEC2Client) DescribeVpcPeeringConnections(ctx context.Context, input *ec2.DescribeVpcPeeringConnectionsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
+	return m.DescribeVpcPeeringConnectionsRequestFun(ctx, input)
 }
 
-// CreateVpcPeeringConnectionRequest create vpc peering connection.
-func (m *MockEC2Client) CreateVpcPeeringConnectionRequest(input *ec2.CreateVpcPeeringConnectionInput) ec2.CreateVpcPeeringConnectionRequest {
-	return m.CreateVpcPeeringConnectionRequestFun(input)
+// CreateVpcPeeringConnection create vpc peering connection.
+func (m *MockEC2Client) CreateVpcPeeringConnection(ctx context.Context, input *ec2.CreateVpcPeeringConnectionInput, opts ...func(*ec2.Options)) (*ec2.CreateVpcPeeringConnectionOutput, error) {
+	return m.CreateVpcPeeringConnectionRequestFun(ctx, input)
 }
 
-// DescribeRouteTablesRequest describe route table.
-func (m *MockEC2Client) DescribeRouteTablesRequest(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
-	return m.DescribeRouteTablesRequestFun(input)
+// DescribeRouteTables describe route table.
+func (m *MockEC2Client) DescribeRouteTables(ctx context.Context, input *ec2.DescribeRouteTablesInput, opts ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
+	return m.DescribeRouteTablesRequestFun(ctx, input)
 }
 
-// DeleteRouteRequest delete route.
-func (m *MockEC2Client) DeleteRouteRequest(input *ec2.DeleteRouteInput) ec2.DeleteRouteRequest {
-	return m.DeleteRouteRequestFun(input)
+// DeleteRoute delete route.
+func (m *MockEC2Client) DeleteRoute(ctx context.Context, input *ec2.DeleteRouteInput, opts ...func(*ec2.Options)) (*ec2.DeleteRouteOutput, error) {
+	return m.DeleteRouteRequestFun(ctx, input)
 }
 
-// ModifyVpcPeeringConnectionOptionsRequest modify vpc peering
-func (m *MockEC2Client) ModifyVpcPeeringConnectionOptionsRequest(input *ec2.ModifyVpcPeeringConnectionOptionsInput) ec2.ModifyVpcPeeringConnectionOptionsRequest {
-	return m.ModifyVpcPeeringConnectionOptionsRequestFun(input)
+// ModifyVpcPeeringConnectionOptions modify vpc peering
+func (m *MockEC2Client) ModifyVpcPeeringConnectionOptions(ctx context.Context, input *ec2.ModifyVpcPeeringConnectionOptionsInput, opts ...func(*ec2.Options)) (*ec2.ModifyVpcPeeringConnectionOptionsOutput, error) {
+	return m.ModifyVpcPeeringConnectionOptionsRequestFun(ctx, input)
 }
 
-// DeleteVpcPeeringConnectionRequest delete vpc peering
-func (m *MockEC2Client) DeleteVpcPeeringConnectionRequest(input *ec2.DeleteVpcPeeringConnectionInput) ec2.DeleteVpcPeeringConnectionRequest {
-	return m.DeleteVpcPeeringConnectionRequestFun(input)
+// DeleteVpcPeeringConnection delete vpc peering
+func (m *MockEC2Client) DeleteVpcPeeringConnection(ctx context.Context, input *ec2.DeleteVpcPeeringConnectionInput, opts ...func(*ec2.Options)) (*ec2.DeleteVpcPeeringConnectionOutput, error) {
+	return m.DeleteVpcPeeringConnectionRequestFun(ctx, input)
 }
 
-// CreateTagsRequest create tags
-func (m *MockEC2Client) CreateTagsRequest(input *ec2.CreateTagsInput) ec2.CreateTagsRequest {
-	return m.CreateTagsRequestFun(input)
+// CreateTags create tags
+func (m *MockEC2Client) CreateTags(ctx context.Context, input *ec2.CreateTagsInput, opts ...func(*ec2.Options)) (*ec2.CreateTagsOutput, error) {
+	return m.CreateTagsRequestFun(ctx, input)
 }
 
-// AcceptVpcPeeringConnectionRequest accept vpc peering connection
-func (m *MockEC2Client) AcceptVpcPeeringConnectionRequest(input *ec2.AcceptVpcPeeringConnectionInput) ec2.AcceptVpcPeeringConnectionRequest {
-	return m.AcceptVpcPeeringConnectionRequestFun(input)
+// AcceptVpcPeeringConnection accept vpc peering connection
+func (m *MockEC2Client) AcceptVpcPeeringConnection(ctx context.Context, input *ec2.AcceptVpcPeeringConnectionInput, opts ...func(*ec2.Options)) (*ec2.AcceptVpcPeeringConnectionOutput, error) {
+	return m.AcceptVpcPeeringConnectionRequestFun(ctx, input)
 }
 
 // MockRoute53Client route53 client
 type MockRoute53Client struct {
 	// CreateVPCAssociationAuthorizationRequestFun mock create vpc AssociationAuthorization
-	CreateVPCAssociationAuthorizationRequestFun func(input *route53.CreateVPCAssociationAuthorizationInput) route53.CreateVPCAssociationAuthorizationRequest
+	CreateVPCAssociationAuthorizationRequestFun func(ctx context.Context, input *route53.CreateVPCAssociationAuthorizationInput, opts ...func(*route53.Options)) (*route53.CreateVPCAssociationAuthorizationOutput, error)
 	// DeleteVPCAssociationAuthorizationRequestFun mock delete vpc AssociationAuthorization
-	DeleteVPCAssociationAuthorizationRequestFun func(input *route53.DeleteVPCAssociationAuthorizationInput) route53.DeleteVPCAssociationAuthorizationRequest
+	DeleteVPCAssociationAuthorizationRequestFun func(ctx context.Context, input *route53.DeleteVPCAssociationAuthorizationInput, opts ...func(*route53.Options)) (*route53.DeleteVPCAssociationAuthorizationOutput, error)
 }
 
-// CreateVPCAssociationAuthorizationRequest create AssociationAuthorization
-func (m *MockRoute53Client) CreateVPCAssociationAuthorizationRequest(input *route53.CreateVPCAssociationAuthorizationInput) route53.CreateVPCAssociationAuthorizationRequest {
-	return m.CreateVPCAssociationAuthorizationRequestFun(input)
+// CreateVPCAssociationAuthorization create AssociationAuthorization
+func (m *MockRoute53Client) CreateVPCAssociationAuthorization(ctx context.Context, input *route53.CreateVPCAssociationAuthorizationInput, opts ...func(*route53.Options)) (*route53.CreateVPCAssociationAuthorizationOutput, error) {
+	return m.CreateVPCAssociationAuthorizationRequestFun(ctx, input)
 }
 
-// DeleteVPCAssociationAuthorizationRequest delete AssociationAuthorization
-func (m *MockRoute53Client) DeleteVPCAssociationAuthorizationRequest(input *route53.DeleteVPCAssociationAuthorizationInput) route53.DeleteVPCAssociationAuthorizationRequest {
-	return m.DeleteVPCAssociationAuthorizationRequestFun(input)
+// DeleteVPCAssociationAuthorization delete AssociationAuthorization
+func (m *MockRoute53Client) DeleteVPCAssociationAuthorization(ctx context.Context, input *route53.DeleteVPCAssociationAuthorizationInput, opts ...func(*route53.Options)) (*route53.DeleteVPCAssociationAuthorizationOutput, error) {
+	return m.DeleteVPCAssociationAuthorizationRequestFun(ctx, input)
 }

@@ -1,6 +1,8 @@
 package peering
 
 import (
+	"context"
+
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
@@ -8,6 +10,7 @@ import (
 
 	sdkaws "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	svcapitypes "github.com/crossplane/provider-aws/apis/vpcpeering/v1alpha1"
@@ -20,7 +23,7 @@ import (
 // operation.
 func GenerateDescribeVpcPeeringConnectionsInput(cr *svcapitypes.VPCPeeringConnection) *ec2.DescribeVpcPeeringConnectionsInput {
 	res := &ec2.DescribeVpcPeeringConnectionsInput{
-		Filters: []ec2.Filter{
+		Filters: []ec2types.Filter{
 			{
 				Name:   aws.String("tag:Name"),
 				Values: []string{cr.ObjectMeta.Name},
@@ -28,15 +31,15 @@ func GenerateDescribeVpcPeeringConnectionsInput(cr *svcapitypes.VPCPeeringConnec
 			{
 				Name: aws.String("status-code"),
 				Values: []string{
-					string(ec2.VpcPeeringConnectionStateReasonCodeInitiatingRequest),
-					string(ec2.VpcPeeringConnectionStateReasonCodeActive),
-					string(ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance),
-					string(ec2.VpcPeeringConnectionStateReasonCodeProvisioning),
+					string(ec2types.VpcPeeringConnectionStateReasonCodeInitiatingRequest),
+					string(ec2types.VpcPeeringConnectionStateReasonCodeActive),
+					string(ec2types.VpcPeeringConnectionStateReasonCodePendingAcceptance),
+					string(ec2types.VpcPeeringConnectionStateReasonCodeProvisioning),
 					// If the vpc id does not exist, the status of the vpc peering connection will become failed.
 					// Describe result should contains failed vpc peering connection, otherwise the controller will always create peering and eventually api throttling
-					string(ec2.VpcPeeringConnectionStateReasonCodeFailed),
+					string(ec2types.VpcPeeringConnectionStateReasonCodeFailed),
 					// If peer vpc reject connection, we should not create it again.
-					string(ec2.VpcPeeringConnectionStateReasonCodeRejected),
+					string(ec2types.VpcPeeringConnectionStateReasonCodeRejected),
 				},
 			},
 		},
@@ -46,10 +49,10 @@ func GenerateDescribeVpcPeeringConnectionsInput(cr *svcapitypes.VPCPeeringConnec
 }
 
 // BuildPeering returns the current state in the form of *svcapitypes.VPCPeeringConnection.
-func BuildPeering(resp *ec2.DescribeVpcPeeringConnectionsResponse) *svcapitypes.VPCPeeringConnection { // nolint:gocyclo
+func BuildPeering(resp *ec2.DescribeVpcPeeringConnectionsOutput) *svcapitypes.VPCPeeringConnection { // nolint:gocyclo
 	cr := &svcapitypes.VPCPeeringConnection{}
 
-	output := resp.DescribeVpcPeeringConnectionsOutput
+	output := resp
 	if output == nil {
 		return cr
 	}
@@ -227,45 +230,45 @@ func GenerateCreateVpcPeeringConnectionInput(cr *svcapitypes.VPCPeeringConnectio
 // EC2Client ec2 client
 type EC2Client interface {
 	// DescribeVpcPeeringConnectionsRequest describe vpc peering connection
-	DescribeVpcPeeringConnectionsRequest(*ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest
+	DescribeVpcPeeringConnections(context.Context, *ec2.DescribeVpcPeeringConnectionsInput, ...func(*ec2.Options)) (*ec2.DescribeVpcPeeringConnectionsOutput, error)
 	// CreateVpcPeeringConnectionRequest create vpc peering connection
-	CreateVpcPeeringConnectionRequest(*ec2.CreateVpcPeeringConnectionInput) ec2.CreateVpcPeeringConnectionRequest
+	CreateVpcPeeringConnection(context.Context, *ec2.CreateVpcPeeringConnectionInput, ...func(*ec2.Options)) (*ec2.CreateVpcPeeringConnectionOutput, error)
 	// CreateTagsRequest create tags for vpc peering
-	CreateTagsRequest(*ec2.CreateTagsInput) ec2.CreateTagsRequest
+	CreateTags(context.Context, *ec2.CreateTagsInput, ...func(*ec2.Options)) (*ec2.CreateTagsOutput, error)
 	// DescribeRouteTablesRequest describe route table
-	DescribeRouteTablesRequest(*ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest
+	DescribeRouteTables(context.Context, *ec2.DescribeRouteTablesInput, ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error)
 	// CreateRouteRequest create route
-	CreateRouteRequest(*ec2.CreateRouteInput) ec2.CreateRouteRequest
+	CreateRoute(context.Context, *ec2.CreateRouteInput, ...func(*ec2.Options)) (*ec2.CreateRouteOutput, error)
 	// DeleteRouteRequest delete route
-	DeleteRouteRequest(*ec2.DeleteRouteInput) ec2.DeleteRouteRequest
+	DeleteRoute(context.Context, *ec2.DeleteRouteInput, ...func(*ec2.Options)) (*ec2.DeleteRouteOutput, error)
 	// ModifyVpcPeeringConnectionOptionsRequest motify vpc peering
-	ModifyVpcPeeringConnectionOptionsRequest(*ec2.ModifyVpcPeeringConnectionOptionsInput) ec2.ModifyVpcPeeringConnectionOptionsRequest
+	ModifyVpcPeeringConnectionOptions(context.Context, *ec2.ModifyVpcPeeringConnectionOptionsInput, ...func(*ec2.Options)) (*ec2.ModifyVpcPeeringConnectionOptionsOutput, error)
 	// DeleteVpcPeeringConnectionRequest delete vpc peering
-	DeleteVpcPeeringConnectionRequest(*ec2.DeleteVpcPeeringConnectionInput) ec2.DeleteVpcPeeringConnectionRequest
+	DeleteVpcPeeringConnection(context.Context, *ec2.DeleteVpcPeeringConnectionInput, ...func(*ec2.Options)) (*ec2.DeleteVpcPeeringConnectionOutput, error)
 	// AcceptVpcPeeringConnectionRequest accept vpc peering connection
-	AcceptVpcPeeringConnectionRequest(*ec2.AcceptVpcPeeringConnectionInput) ec2.AcceptVpcPeeringConnectionRequest
+	AcceptVpcPeeringConnection(context.Context, *ec2.AcceptVpcPeeringConnectionInput, ...func(*ec2.Options)) (*ec2.AcceptVpcPeeringConnectionOutput, error)
 }
 
 // NewEc2Client create ec2 client
 func NewEc2Client(cfg sdkaws.Config) EC2Client {
-	return ec2.New(cfg)
+	return ec2.NewFromConfig(cfg)
 }
 
 // NewRoute53Client create route53 client
 func NewRoute53Client(cfg sdkaws.Config) Route53Client {
-	return route53.New(cfg)
+	return route53.NewFromConfig(cfg)
 }
 
 // Route53Client route53 client
 type Route53Client interface {
-	CreateVPCAssociationAuthorizationRequest(*route53.CreateVPCAssociationAuthorizationInput) route53.CreateVPCAssociationAuthorizationRequest
-	DeleteVPCAssociationAuthorizationRequest(*route53.DeleteVPCAssociationAuthorizationInput) route53.DeleteVPCAssociationAuthorizationRequest
+	CreateVPCAssociationAuthorization(context.Context, *route53.CreateVPCAssociationAuthorizationInput, ...func(*route53.Options)) (*route53.CreateVPCAssociationAuthorizationOutput, error)
+	DeleteVPCAssociationAuthorization(context.Context, *route53.DeleteVPCAssociationAuthorizationInput, ...func(*route53.Options)) (*route53.DeleteVPCAssociationAuthorizationOutput, error)
 }
 
 type StsClient interface {
-	GetCallerIdentityRequest(*sts.GetCallerIdentityInput) sts.GetCallerIdentityRequest
+	GetCallerIdentity(context.Context, *sts.GetCallerIdentityInput, ...func(*sts.Options)) (*sts.GetCallerIdentityOutput, error)
 }
 
 func NewStsClient(cfg sdkaws.Config) StsClient {
-	return sts.New(cfg)
+	return sts.NewFromConfig(cfg)
 }

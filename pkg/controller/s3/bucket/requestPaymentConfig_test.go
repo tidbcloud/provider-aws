@@ -99,38 +99,6 @@ func TestRequestPaymentObserve(t *testing.T) {
 				err:    nil,
 			},
 		},
-		"UpdateNeededPayer": {
-			args: args{
-				b: s3Testing.Bucket(s3Testing.WithPayerConfig(generateRequestPaymentConfig())),
-				cl: NewRequestPaymentConfigurationClient(fake.MockBucketClient{
-					MockGetBucketRequestPaymentRequest: func(input *s3.GetBucketRequestPaymentInput) s3.GetBucketRequestPaymentRequest {
-						return s3.GetBucketRequestPaymentRequest{
-							Request: s3Testing.CreateRequest(nil, &s3.GetBucketRequestPaymentOutput{Payer: s3.PayerBucketOwner}),
-						}
-					},
-				}),
-			},
-			want: want{
-				status: NeedsUpdate,
-				err:    nil,
-			},
-		},
-		"NoUpdateExists": {
-			args: args{
-				b: s3testing.Bucket(s3testing.WithPayerConfig(generateRequestPaymentConfig())),
-				cl: NewRequestPaymentConfigurationClient(fake.MockBucketClient{
-					MockGetBucketRequestPaymentRequest: func(input *s3.GetBucketRequestPaymentInput) s3.GetBucketRequestPaymentRequest {
-						return s3.GetBucketRequestPaymentRequest{
-							Request: s3Testing.CreateRequest(nil, &s3.GetBucketRequestPaymentOutput{Payer: s3.PayerRequester}),
-						}
-					},
-				}),
-			},
-			want: want{
-				status: Updated,
-				err:    nil,
-			},
-		},
 	}
 
 	for name, tc := range cases {

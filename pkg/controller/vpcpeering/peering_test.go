@@ -67,16 +67,13 @@ func TestObserve(t *testing.T) {
 				},
 				cr: buildVPCPeerConnection("test"),
 				client: &fake.MockEC2Client{
-					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
-						return ec2.DescribeVpcPeeringConnectionsRequest{
-							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
-								//Attributes: attributes,
-								VpcPeeringConnections: []ec2.VpcPeeringConnection{},
-							}},
-						}
+					DescribeVpcPeeringConnectionsRequestFun: func(ctx context.Context, input *ec2.DescribeVpcPeeringConnectionsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
+						return ec2.DescribeVpcPeeringConnectionsOutput{
+							VpcPeeringConnections: []ec2.VpcPeeringConnection{},
+						}, nil
 					},
-					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
-						return ec2.DescribeRouteTablesRequest{
+					DescribeRouteTablesRequestFun: func(ctx context.Context, input *ec2.DescribeRouteTablesInput, opts ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
+						return ec2.DescribeRouteTablesOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
 								RouteTables: make([]ec2.RouteTable, 0),
 							}},
@@ -107,8 +104,8 @@ func TestObserve(t *testing.T) {
 					return cr
 				}(),
 				client: &fake.MockEC2Client{
-					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
-						return ec2.DescribeVpcPeeringConnectionsRequest{
+					DescribeVpcPeeringConnectionsRequestFun: func(ctx context.Context, input *ec2.DescribeVpcPeeringConnectionsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
+						return ec2.DescribeVpcPeeringConnectionsOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
 								//Attributes: attributes,
 								VpcPeeringConnections: []ec2.VpcPeeringConnection{
@@ -129,8 +126,8 @@ func TestObserve(t *testing.T) {
 							}},
 						}
 					},
-					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
-						return ec2.DescribeRouteTablesRequest{
+					DescribeRouteTablesRequestFun: func(ctx context.Context, input *ec2.DescribeRouteTablesInput, opts ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
+						return ec2.DescribeRouteTablesOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
 								RouteTables: make([]ec2.RouteTable, 0),
 							}},
@@ -156,8 +153,8 @@ func TestObserve(t *testing.T) {
 				},
 				cr: buildVPCPeerConnection("test"),
 				client: &fake.MockEC2Client{
-					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
-						return ec2.DescribeVpcPeeringConnectionsRequest{
+					DescribeVpcPeeringConnectionsRequestFun: func(ctx context.Context, input *ec2.DescribeVpcPeeringConnectionsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
+						return ec2.DescribeVpcPeeringConnectionsOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
 								//Attributes: attributes,
 								VpcPeeringConnections: []ec2.VpcPeeringConnection{
@@ -178,8 +175,8 @@ func TestObserve(t *testing.T) {
 							}},
 						}
 					},
-					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
-						return ec2.DescribeRouteTablesRequest{
+					DescribeRouteTablesRequestFun: func(ctx context.Context, input *ec2.DescribeRouteTablesInput, opts ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
+						return ec2.DescribeRouteTablesOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
 								RouteTables: make([]ec2.RouteTable, 0),
 							}},
@@ -205,8 +202,8 @@ func TestObserve(t *testing.T) {
 				},
 				cr: buildVPCPeerConnection("test"),
 				client: &fake.MockEC2Client{
-					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
-						return ec2.DescribeVpcPeeringConnectionsRequest{
+					DescribeVpcPeeringConnectionsRequestFun: func(ctx context.Context, input *ec2.DescribeVpcPeeringConnectionsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
+						return ec2.DescribeVpcPeeringConnectionsOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
 								//Attributes: attributes,
 								VpcPeeringConnections: []ec2.VpcPeeringConnection{
@@ -240,8 +237,8 @@ func TestObserve(t *testing.T) {
 				},
 				cr: inDeletingVPCPeerConnection("test"),
 				client: &fake.MockEC2Client{
-					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
-						return ec2.DescribeVpcPeeringConnectionsRequest{
+					DescribeVpcPeeringConnectionsRequestFun: func(ctx context.Context, input *ec2.DescribeVpcPeeringConnectionsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
+						return ec2.DescribeVpcPeeringConnectionsOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
 								//Attributes: attributes,
 								VpcPeeringConnections: []ec2.VpcPeeringConnection{
@@ -274,8 +271,8 @@ func TestObserve(t *testing.T) {
 				},
 				cr: buildVPCPeerConnection("test"),
 				client: &fake.MockEC2Client{
-					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
-						return ec2.DescribeVpcPeeringConnectionsRequest{
+					DescribeVpcPeeringConnectionsRequestFun: func(ctx context.Context, input *ec2.DescribeVpcPeeringConnectionsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
+						return ec2.DescribeVpcPeeringConnectionsOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
 								//Attributes: attributes,
 								VpcPeeringConnections: []ec2.VpcPeeringConnection{
@@ -289,8 +286,8 @@ func TestObserve(t *testing.T) {
 							}},
 						}
 					},
-					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
-						return ec2.DescribeRouteTablesRequest{
+					DescribeRouteTablesRequestFun: func(ctx context.Context, input *ec2.DescribeRouteTablesInput, opts ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
+						return ec2.DescribeRouteTablesOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
 								RouteTables: make([]ec2.RouteTable, 0),
 							}},
@@ -298,9 +295,9 @@ func TestObserve(t *testing.T) {
 					},
 				},
 				peerClient: &fake.MockEC2Client{
-					AcceptVpcPeeringConnectionRequestFun: func(input *ec2.AcceptVpcPeeringConnectionInput) ec2.AcceptVpcPeeringConnectionRequest {
+					AcceptVpcPeeringConnectionRequestFun: func(ctx context.Context, input *ec2.AcceptVpcPeeringConnectionInput, opts ...func(*ec2.Options)) (*ec2.AcceptVpcPeeringConnectionOutput, error) {
 						g.Expect(*input.VpcPeeringConnectionId).Should(Equal("peerConnectionID"))
-						return ec2.AcceptVpcPeeringConnectionRequest{
+						return ec2.AcceptVpcPeeringConnectionOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.AcceptVpcPeeringConnectionOutput{}},
 						}
 					},
@@ -325,8 +322,8 @@ func TestObserve(t *testing.T) {
 				},
 				cr: buildVPCPeerConnection("test"),
 				client: &fake.MockEC2Client{
-					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
-						return ec2.DescribeVpcPeeringConnectionsRequest{
+					DescribeVpcPeeringConnectionsRequestFun: func(ctx context.Context, input *ec2.DescribeVpcPeeringConnectionsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
+						return ec2.DescribeVpcPeeringConnectionsOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
 								VpcPeeringConnections: []ec2.VpcPeeringConnection{
 									{
@@ -369,8 +366,8 @@ func TestObserve(t *testing.T) {
 				},
 				cr: buildVPCPeerConnection("test"),
 				client: &fake.MockEC2Client{
-					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
-						return ec2.DescribeVpcPeeringConnectionsRequest{
+					DescribeVpcPeeringConnectionsRequestFun: func(ctx context.Context, input *ec2.DescribeVpcPeeringConnectionsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
+						return ec2.DescribeVpcPeeringConnectionsOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
 								VpcPeeringConnections: []ec2.VpcPeeringConnection{
 									{
@@ -458,13 +455,13 @@ func TestCreate(t *testing.T) {
 				route53Cli: &fake.MockRoute53Client{},
 				cr:         buildVPCPeerConnection("test"),
 				client: &fake.MockEC2Client{
-					CreateVpcPeeringConnectionRequestFun: func(input *ec2.CreateVpcPeeringConnectionInput) ec2.CreateVpcPeeringConnectionRequest {
+					CreateVpcPeeringConnectionRequestFun: func(ctx context.Context, input *ec2.CreateVpcPeeringConnectionInput, opts ...func(*ec2.Options)) (*ec2.CreateVpcPeeringConnectionOutput, error) {
 						g.Expect(*input.PeerRegion).Should(Equal("peerRegion"))
 						g.Expect(*input.PeerOwnerId).Should(Equal("peerOwner"))
 						g.Expect(*input.PeerVpcId).Should(Equal("peerVpc"))
 						g.Expect(*input.VpcId).Should(Equal("ownerVpc"))
 
-						return ec2.CreateVpcPeeringConnectionRequest{
+						return ec2.CreateVpcPeeringConnectionOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.CreateVpcPeeringConnectionOutput{
 								//Attributes: attributes,
 								VpcPeeringConnection: &ec2.VpcPeeringConnection{
@@ -474,17 +471,17 @@ func TestCreate(t *testing.T) {
 						}
 					},
 
-					CreateTagsRequestFun: func(input *ec2.CreateTagsInput) ec2.CreateTagsRequest {
+					CreateTagsRequestFun: func(ctx context.Context, input *ec2.CreateTagsInput, opts ...func(*ec2.Options)) (*ec2.CreateTagsOutput, error) {
 						g.Expect(len(input.Tags)).Should(Equal(1))
 						g.Expect(*input.Tags[0].Key).Should(Equal("Name"))
 						g.Expect(*input.Tags[0].Value).Should(Equal("test"))
-						return ec2.CreateTagsRequest{
+						return ec2.CreateTagsOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.CreateTagsOutput{}},
 						}
 					},
 
-					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
-						return ec2.DescribeRouteTablesRequest{
+					DescribeRouteTablesRequestFun: func(ctx context.Context, input *ec2.DescribeRouteTablesInput, opts ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
+						return ec2.DescribeRouteTablesOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
 								RouteTables: make([]ec2.RouteTable, 0),
 							}},
@@ -544,27 +541,27 @@ func TestDelete(t *testing.T) {
 					MockDelete: test.NewMockClient().Delete,
 				},
 				route53Cli: &fake.MockRoute53Client{
-					DeleteVPCAssociationAuthorizationRequestFun: func(input *route53.DeleteVPCAssociationAuthorizationInput) route53.DeleteVPCAssociationAuthorizationRequest {
+					DeleteVPCAssociationAuthorizationRequestFun: func(ctx context.Context, input *route53.DeleteVPCAssociationAuthorizationInput, opts ...func(*route53.Options)) (*route53.DeleteVPCAssociationAuthorizationOutput, error) {
 						g.Expect(*input.HostedZoneId).Should(Equal("owner"))
 						g.Expect(*input.VPC.VPCId).Should(Equal("peerVpc"))
 						g.Expect(string(input.VPC.VPCRegion)).Should(Equal("peerRegion"))
 
-						return route53.DeleteVPCAssociationAuthorizationRequest{
+						return route53.DeleteVPCAssociationAuthorizationOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &route53.DeleteVPCAssociationAuthorizationOutput{}},
 						}
 					},
 				},
 				cr: pc.DeepCopy(),
 				client: &fake.MockEC2Client{
-					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
-						return ec2.DescribeRouteTablesRequest{
+					DescribeRouteTablesRequestFun: func(ctx context.Context, input *ec2.DescribeRouteTablesInput, opts ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
+						return ec2.DescribeRouteTablesOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
 								RouteTables: make([]ec2.RouteTable, 0),
 							}},
 						}
 					},
-					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
-						return ec2.DescribeVpcPeeringConnectionsRequest{
+					DescribeVpcPeeringConnectionsRequestFun: func(ctx context.Context, input *ec2.DescribeVpcPeeringConnectionsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
+						return ec2.DescribeVpcPeeringConnectionsOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
 								//Attributes: attributes,
 								VpcPeeringConnections: []ec2.VpcPeeringConnection{
@@ -585,8 +582,8 @@ func TestDelete(t *testing.T) {
 							}},
 						}
 					},
-					DeleteVpcPeeringConnectionRequestFun: func(input *ec2.DeleteVpcPeeringConnectionInput) ec2.DeleteVpcPeeringConnectionRequest {
-						return ec2.DeleteVpcPeeringConnectionRequest{
+					DeleteVpcPeeringConnectionRequestFun: func(ctx context.Context, input *ec2.DeleteVpcPeeringConnectionInput, opts ...func(*ec2.Options)) (*ec2.DeleteVpcPeeringConnectionOutput, error) {
+						return ec2.DeleteVpcPeeringConnectionOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DeleteVpcPeeringConnectionOutput{}},
 						}
 					},
@@ -603,24 +600,24 @@ func TestDelete(t *testing.T) {
 					MockDelete: test.NewMockClient().Delete,
 				},
 				route53Cli: &fake.MockRoute53Client{
-					DeleteVPCAssociationAuthorizationRequestFun: func(input *route53.DeleteVPCAssociationAuthorizationInput) route53.DeleteVPCAssociationAuthorizationRequest {
+					DeleteVPCAssociationAuthorizationRequestFun: func(ctx context.Context, input *route53.DeleteVPCAssociationAuthorizationInput, opts ...func(*route53.Options)) (*route53.DeleteVPCAssociationAuthorizationOutput, error) {
 						g.Expect(*input.HostedZoneId).Should(Equal("owner"))
 						g.Expect(*input.VPC.VPCId).Should(Equal("peerVpc"))
 						g.Expect(string(input.VPC.VPCRegion)).Should(Equal("peerRegion"))
 
-						return route53.DeleteVPCAssociationAuthorizationRequest{
+						return route53.DeleteVPCAssociationAuthorizationOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &route53.DeleteVPCAssociationAuthorizationOutput{}},
 						}
 					},
 				},
 				cr: pc.DeepCopy(),
 				client: &fake.MockEC2Client{
-					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+					DescribeRouteTablesRequestFun: func(ctx context.Context, input *ec2.DescribeRouteTablesInput, opts ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
 						g.Expect(len(input.Filters)).Should(Equal(1))
 						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
 						g.Expect(input.Filters[0].Values).Should((Equal([]string{"ownerVpc"})))
 
-						return ec2.DescribeRouteTablesRequest{
+						return ec2.DescribeRouteTablesOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
 								RouteTables: []ec2.RouteTable{
 									{
@@ -630,15 +627,15 @@ func TestDelete(t *testing.T) {
 							}},
 						}
 					},
-					DeleteRouteRequestFun: func(input *ec2.DeleteRouteInput) ec2.DeleteRouteRequest {
+					DeleteRouteRequestFun: func(ctx context.Context, input *ec2.DeleteRouteInput, opts ...func(*ec2.Options)) (*ec2.DeleteRouteOutput, error) {
 						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt1"))))
 						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("10.0.0.0/8"))))
-						return ec2.DeleteRouteRequest{
+						return ec2.DeleteRouteOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DeleteRouteOutput{}},
 						}
 					},
-					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
-						return ec2.DescribeVpcPeeringConnectionsRequest{
+					DescribeVpcPeeringConnectionsRequestFun: func(ctx context.Context, input *ec2.DescribeVpcPeeringConnectionsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
+						return ec2.DescribeVpcPeeringConnectionsOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
 								//Attributes: attributes,
 								VpcPeeringConnections: []ec2.VpcPeeringConnection{
@@ -659,19 +656,19 @@ func TestDelete(t *testing.T) {
 							}},
 						}
 					},
-					DeleteVpcPeeringConnectionRequestFun: func(input *ec2.DeleteVpcPeeringConnectionInput) ec2.DeleteVpcPeeringConnectionRequest {
-						return ec2.DeleteVpcPeeringConnectionRequest{
+					DeleteVpcPeeringConnectionRequestFun: func(ctx context.Context, input *ec2.DeleteVpcPeeringConnectionInput, opts ...func(*ec2.Options)) (*ec2.DeleteVpcPeeringConnectionOutput, error) {
+						return ec2.DeleteVpcPeeringConnectionOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DeleteVpcPeeringConnectionOutput{}},
 						}
 					},
 				},
 				peerClient: &fake.MockEC2Client{
-					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+					DescribeRouteTablesRequestFun: func(ctx context.Context, input *ec2.DescribeRouteTablesInput, opts ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
 						g.Expect(len(input.Filters)).Should(Equal(1))
 						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
 						g.Expect(input.Filters[0].Values).Should((Equal([]string{"peerVpc"})))
 
-						return ec2.DescribeRouteTablesRequest{
+						return ec2.DescribeRouteTablesOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
 								RouteTables: []ec2.RouteTable{
 									{
@@ -681,10 +678,10 @@ func TestDelete(t *testing.T) {
 							}},
 						}
 					},
-					DeleteRouteRequestFun: func(input *ec2.DeleteRouteInput) ec2.DeleteRouteRequest {
+					DeleteRouteRequestFun: func(ctx context.Context, input *ec2.DeleteRouteInput, opts ...func(*ec2.Options)) (*ec2.DeleteRouteOutput, error) {
 						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt2"))))
 						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("196.168.0.0/16"))))
-						return ec2.DeleteRouteRequest{
+						return ec2.DeleteRouteOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DeleteRouteOutput{}},
 						}
 					},
@@ -749,11 +746,11 @@ func TestUpdateRouteTable(t *testing.T) {
 				route53Cli: &fake.MockRoute53Client{},
 				cr:         pc.DeepCopy(),
 				client: &fake.MockEC2Client{
-					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+					DescribeRouteTablesRequestFun: func(ctx context.Context, input *ec2.DescribeRouteTablesInput, opts ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
 						g.Expect(len(input.Filters)).Should(Equal(1))
 						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
 						g.Expect(input.Filters[0].Values).Should((Equal([]string{"ownerVpc"})))
-						return ec2.DescribeRouteTablesRequest{
+						return ec2.DescribeRouteTablesOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
 								RouteTables: []ec2.RouteTable{
 									{
@@ -763,11 +760,11 @@ func TestUpdateRouteTable(t *testing.T) {
 							}},
 						}
 					},
-					CreateRouteRequestFun: func(input *ec2.CreateRouteInput) ec2.CreateRouteRequest {
+					CreateRouteRequestFun: func(ctx context.Context, input *ec2.CreateRouteInput, opts ...func(*ec2.Options)) (*ec2.CreateRouteOutput, error) {
 						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt1"))))
 						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("10.0.0.0/8"))))
 						g.Expect(input.VpcPeeringConnectionId).Should((Equal(aws.String(peeringConnectionID))))
-						return ec2.CreateRouteRequest{
+						return ec2.CreateRouteOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.CreateRouteOutput{
 								Return: aws.Bool(true),
 							}},
@@ -790,11 +787,11 @@ func TestUpdateRouteTable(t *testing.T) {
 				route53Cli: &fake.MockRoute53Client{},
 				cr:         pc.DeepCopy(),
 				client: &fake.MockEC2Client{
-					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+					DescribeRouteTablesRequestFun: func(ctx context.Context, input *ec2.DescribeRouteTablesInput, opts ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
 						g.Expect(len(input.Filters)).Should(Equal(1))
 						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
 						g.Expect(input.Filters[0].Values).Should((Equal([]string{"ownerVpc"})))
-						return ec2.DescribeRouteTablesRequest{
+						return ec2.DescribeRouteTablesOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
 								RouteTables: []ec2.RouteTable{
 									{
@@ -816,11 +813,11 @@ func TestUpdateRouteTable(t *testing.T) {
 						}
 					},
 
-					CreateRouteRequestFun: func(input *ec2.CreateRouteInput) ec2.CreateRouteRequest {
+					CreateRouteRequestFun: func(ctx context.Context, input *ec2.CreateRouteInput, opts ...func(*ec2.Options)) (*ec2.CreateRouteOutput, error) {
 						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt1"))))
 						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("10.0.0.0/8"))))
 						g.Expect(input.VpcPeeringConnectionId).Should((Equal(aws.String(peeringConnectionID))))
-						return ec2.CreateRouteRequest{
+						return ec2.CreateRouteOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.CreateRouteOutput{
 								Return: aws.Bool(false),
 							}, Error: fmt.Errorf("RouteAlreadyExists")},
@@ -843,11 +840,11 @@ func TestUpdateRouteTable(t *testing.T) {
 				route53Cli: &fake.MockRoute53Client{},
 				cr:         pc.DeepCopy(),
 				client: &fake.MockEC2Client{
-					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+					DescribeRouteTablesRequestFun: func(ctx context.Context, input *ec2.DescribeRouteTablesInput, opts ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
 						g.Expect(len(input.Filters)).Should(Equal(1))
 						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
 						g.Expect(input.Filters[0].Values).Should((Equal([]string{"ownerVpc"})))
-						return ec2.DescribeRouteTablesRequest{
+						return ec2.DescribeRouteTablesOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
 								RouteTables: []ec2.RouteTable{
 									{
@@ -864,11 +861,11 @@ func TestUpdateRouteTable(t *testing.T) {
 						}
 					},
 
-					CreateRouteRequestFun: func(input *ec2.CreateRouteInput) ec2.CreateRouteRequest {
+					CreateRouteRequestFun: func(ctx context.Context, input *ec2.CreateRouteInput, opts ...func(*ec2.Options)) (*ec2.CreateRouteOutput, error) {
 						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt1"))))
 						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("10.0.0.0/8"))))
 						g.Expect(input.VpcPeeringConnectionId).Should((Equal(aws.String(peeringConnectionID))))
-						return ec2.CreateRouteRequest{
+						return ec2.CreateRouteOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.CreateRouteOutput{
 								Return: aws.Bool(false),
 							}, Error: fmt.Errorf("RouteAlreadyExists")},
@@ -893,12 +890,12 @@ func TestUpdateRouteTable(t *testing.T) {
 				route53Cli: &fake.MockRoute53Client{},
 				cr:         pc.DeepCopy(),
 				client: &fake.MockEC2Client{
-					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+					DescribeRouteTablesRequestFun: func(ctx context.Context, input *ec2.DescribeRouteTablesInput, opts ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
 						g.Expect(len(input.Filters)).Should(Equal(1))
 						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
 						g.Expect(input.Filters[0].Values).Should((Equal([]string{"ownerVpc"})))
 
-						return ec2.DescribeRouteTablesRequest{
+						return ec2.DescribeRouteTablesOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
 								RouteTables: []ec2.RouteTable{
 									{
@@ -908,11 +905,11 @@ func TestUpdateRouteTable(t *testing.T) {
 							}},
 						}
 					},
-					CreateRouteRequestFun: func(input *ec2.CreateRouteInput) ec2.CreateRouteRequest {
+					CreateRouteRequestFun: func(ctx context.Context, input *ec2.CreateRouteInput, opts ...func(*ec2.Options)) (*ec2.CreateRouteOutput, error) {
 						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt1"))))
 						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("10.0.0.0/8"))))
 						g.Expect(input.VpcPeeringConnectionId).Should((Equal(aws.String(peeringConnectionID))))
-						return ec2.CreateRouteRequest{
+						return ec2.CreateRouteOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.CreateRouteOutput{
 								Return: aws.Bool(true),
 							}},
@@ -920,12 +917,12 @@ func TestUpdateRouteTable(t *testing.T) {
 					},
 				},
 				peerClient: &fake.MockEC2Client{
-					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+					DescribeRouteTablesRequestFun: func(ctx context.Context, input *ec2.DescribeRouteTablesInput, opts ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
 						g.Expect(len(input.Filters)).Should(Equal(1))
 						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
 						g.Expect(input.Filters[0].Values).Should((Equal([]string{"peerVpc"})))
 
-						return ec2.DescribeRouteTablesRequest{
+						return ec2.DescribeRouteTablesOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
 								RouteTables: []ec2.RouteTable{
 									{
@@ -935,11 +932,11 @@ func TestUpdateRouteTable(t *testing.T) {
 							}},
 						}
 					},
-					CreateRouteRequestFun: func(input *ec2.CreateRouteInput) ec2.CreateRouteRequest {
+					CreateRouteRequestFun: func(ctx context.Context, input *ec2.CreateRouteInput, opts ...func(*ec2.Options)) (*ec2.CreateRouteOutput, error) {
 						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt2"))))
 						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("196.168.0.0/16"))))
 						g.Expect(input.VpcPeeringConnectionId).Should((Equal(aws.String(peeringConnectionID))))
-						return ec2.CreateRouteRequest{
+						return ec2.CreateRouteOutput{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.CreateRouteOutput{
 								Return: aws.Bool(true),
 							}},
