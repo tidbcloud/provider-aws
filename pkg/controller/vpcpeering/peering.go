@@ -378,7 +378,8 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 		}
 	}
 
-	if !hostZoneReady {
+	// // hostZoneID is optional
+	if !hostZoneReady && cr.Spec.ForProvider.HostZoneID != nil {
 		vpcAssociationAuthorizationInput := &route53.CreateVPCAssociationAuthorizationInput{
 			HostedZoneId: cr.Spec.ForProvider.HostZoneID,
 			VPC: &route53.VPC{
@@ -425,17 +426,20 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 	}
 	cr.Status.SetConditions(xpv1.Deleting())
 
-	_, err := e.route53Client.DeleteVPCAssociationAuthorizationRequest(&route53.DeleteVPCAssociationAuthorizationInput{
-		HostedZoneId: cr.Spec.ForProvider.HostZoneID,
-		VPC: &route53.VPC{
-			VPCId:     cr.Spec.ForProvider.PeerVPCID,
-			VPCRegion: route53.VPCRegion(*cr.Spec.ForProvider.PeerRegion),
-		},
-	}).Send(ctx)
-	if err != nil && !strings.Contains(err.Error(), "VPCAssociationAuthorizationNotFound") {
-		return errors.Wrap(err, "delete VPCAssociationAuthorization")
+	// hostZoneID is optional
+	if cr.Spec.ForProvider.HostZoneID != nil {
+		_, err := e.route53Client.DeleteVPCAssociationAuthorizationRequest(&route53.DeleteVPCAssociationAuthorizationInput{
+			HostedZoneId: cr.Spec.ForProvider.HostZoneID,
+			VPC: &route53.VPC{
+				VPCId:     cr.Spec.ForProvider.PeerVPCID,
+				VPCRegion: route53.VPCRegion(*cr.Spec.ForProvider.PeerRegion),
+			},
+		}).Send(ctx)
+		if err != nil && !strings.Contains(err.Error(), "VPCAssociationAuthorizationNotFound") {
+			return errors.Wrap(err, "delete VPCAssociationAuthorization")
+		}
+		e.log.WithValues("VpcPeering", cr.Name).Debug("Delete VPCAssociationAuthorization successful")
 	}
-	e.log.WithValues("VpcPeering", cr.Name).Debug("Delete VPCAssociationAuthorization successful")
 
 	if cr.Status.AtProvider.VPCPeeringConnectionID != nil {
 		err := e.deleteRoute(ctx, e.client, cr.Name, []string{*cr.Spec.ForProvider.VPCID}, *cr.Spec.ForProvider.PeerCIDR, cr.Status.AtProvider.VPCPeeringConnectionID)
@@ -454,7 +458,7 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 		}
 	}
 
-	err = e.deleteVPCPeeringConnection(ctx, cr)
+	err := e.deleteVPCPeeringConnection(ctx, cr)
 
 	return errors.Wrap(err, "delete VPCPeeringConnection")
 }
