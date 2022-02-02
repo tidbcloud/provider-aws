@@ -778,7 +778,6 @@ func TestUpdateRouteTable(t *testing.T) {
 	pc := buildVPCPeerConnection("test")
 	// test vpc peering connection no route ready annotation
 	pc.Annotations[attributeModified] = "true"
-	pc.Annotations[hostedZoneEnsured] = "true"
 	pc.Spec.ForProvider.PeerCIDR = aws.String("10.0.0.0/8")
 	pc.Status.AtProvider.VPCPeeringConnectionID = aws.String(peeringConnectionID)
 	pc.Status.AtProvider.RequesterVPCInfo = &svcapitypes.VPCPeeringConnectionVPCInfo{

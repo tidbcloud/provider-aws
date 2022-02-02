@@ -53,7 +53,6 @@ const (
 	errWaitVpcPeeringConnectionAccept = "waiting for the user to accept the vpc peering connection"
 
 	routeTableEnsured = "tidbcloud.com/route-table-ensured"
-	hostedZoneEnsured = "tidbcloud.com/hosted-zone-ensured"
 	attributeModified = "tidbcloud.com/attribute-modified"
 
 	// The maximum number of results to return with a single call
@@ -242,9 +241,8 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 	}
 
 	_, routeTableReady := cr.GetAnnotations()[routeTableEnsured]
-	_, hostZoneReady := cr.GetAnnotations()[hostedZoneEnsured]
 	_, attributeReady := cr.GetAnnotations()[attributeModified]
-	if !routeTableReady || !hostZoneReady || !attributeReady {
+	if !routeTableReady || !attributeReady {
 		return managed.ExternalObservation{
 			ResourceExists: true,
 			// vpc peering post processing not complete, forward to Update()
@@ -315,7 +313,6 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 	}
 
 	_, routeTableReady := cr.GetAnnotations()[routeTableEnsured]
-	_, hostZoneReady := cr.GetAnnotations()[hostedZoneEnsured]
 	_, attributeReady := cr.GetAnnotations()[attributeModified]
 
 	if !attributeReady && cr.Status.AtProvider.VPCPeeringConnectionID != nil {
@@ -378,31 +375,26 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 		}
 	}
 
-	// // hostZoneID is optional
-	if !hostZoneReady && cr.Spec.ForProvider.HostZoneID != nil {
-		vpcAssociationAuthorizationInput := &route53.CreateVPCAssociationAuthorizationInput{
-			HostedZoneId: cr.Spec.ForProvider.HostZoneID,
-			VPC: &route53.VPC{
-				VPCId:     cr.Spec.ForProvider.PeerVPCID,
-				VPCRegion: route53.VPCRegion(*cr.Spec.ForProvider.PeerRegion),
-			},
-		}
-		_, err := e.route53Client.CreateVPCAssociationAuthorizationRequest(vpcAssociationAuthorizationInput).Send(ctx)
-		if err != nil && !isAlreadyCreated(err) {
-			return managed.ExternalUpdate{}, errors.Wrap(err, errCreateHostzone)
-		}
+	vpcAssociationAuthorizationInput := &route53.CreateVPCAssociationAuthorizationInput{
+		VPC: &route53.VPC{
+			VPCId:     cr.Spec.ForProvider.PeerVPCID,
+			VPCRegion: route53.VPCRegion(*cr.Spec.ForProvider.PeerRegion),
+		},
+	}
+	_, err := e.route53Client.CreateVPCAssociationAuthorizationRequest(vpcAssociationAuthorizationInput).Send(ctx)
+	if err != nil && !isAlreadyCreated(err) {
+		return managed.ExternalUpdate{}, errors.Wrap(err, errCreateHostzone)
+	}
 
-		e.log.WithValues("VpcPeering", cr.Name).Debug("Create VPCAssociationAuthorization successful")
+	e.log.WithValues("VpcPeering", cr.Name).Debug("Create VPCAssociationAuthorization successful")
 
-		if cr.Annotations == nil {
-			cr.Annotations = map[string]string{}
-		}
-		cr.Annotations[hostedZoneEnsured] = "true"
-		err = e.kube.Update(ctx, cr)
+	if cr.Annotations == nil {
+		cr.Annotations = map[string]string{}
+	}
+	err = e.kube.Update(ctx, cr)
 
-		if err != nil {
-			return managed.ExternalUpdate{}, errors.Wrap(err, "error update peering annotations")
-		}
+	if err != nil {
+		return managed.ExternalUpdate{}, errors.Wrap(err, "error update peering annotations")
 	}
 
 	cr.Status.SetConditions(Approved())
@@ -426,20 +418,16 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 	}
 	cr.Status.SetConditions(xpv1.Deleting())
 
-	// hostZoneID is optional
-	if cr.Spec.ForProvider.HostZoneID != nil {
-		_, err := e.route53Client.DeleteVPCAssociationAuthorizationRequest(&route53.DeleteVPCAssociationAuthorizationInput{
-			HostedZoneId: cr.Spec.ForProvider.HostZoneID,
-			VPC: &route53.VPC{
-				VPCId:     cr.Spec.ForProvider.PeerVPCID,
-				VPCRegion: route53.VPCRegion(*cr.Spec.ForProvider.PeerRegion),
-			},
-		}).Send(ctx)
-		if err != nil && !strings.Contains(err.Error(), "VPCAssociationAuthorizationNotFound") {
-			return errors.Wrap(err, "delete VPCAssociationAuthorization")
-		}
-		e.log.WithValues("VpcPeering", cr.Name).Debug("Delete VPCAssociationAuthorization successful")
+	_, err := e.route53Client.DeleteVPCAssociationAuthorizationRequest(&route53.DeleteVPCAssociationAuthorizationInput{
+		VPC: &route53.VPC{
+			VPCId:     cr.Spec.ForProvider.PeerVPCID,
+			VPCRegion: route53.VPCRegion(*cr.Spec.ForProvider.PeerRegion),
+		},
+	}).Send(ctx)
+	if err != nil && !strings.Contains(err.Error(), "VPCAssociationAuthorizationNotFound") {
+		return errors.Wrap(err, "delete VPCAssociationAuthorization")
 	}
+	e.log.WithValues("VpcPeering", cr.Name).Debug("Delete VPCAssociationAuthorization successful")
 
 	if cr.Status.AtProvider.VPCPeeringConnectionID != nil {
 		err := e.deleteRoute(ctx, e.client, cr.Name, []string{*cr.Spec.ForProvider.VPCID}, *cr.Spec.ForProvider.PeerCIDR, cr.Status.AtProvider.VPCPeeringConnectionID)
