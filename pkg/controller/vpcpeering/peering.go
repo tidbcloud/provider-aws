@@ -446,7 +446,7 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 		}
 	}
 
-	err := e.deleteVPCPeeringConnection(ctx, cr)
+	err = e.deleteVPCPeeringConnection(ctx, cr)
 
 	return errors.Wrap(err, "delete VPCPeeringConnection")
 }
