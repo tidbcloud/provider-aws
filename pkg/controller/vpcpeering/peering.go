@@ -244,12 +244,15 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 	_, routeTableReady := cr.GetAnnotations()[routeTableEnsured]
 	_, hostZoneReady := cr.GetAnnotations()[hostedZoneEnsured]
 	_, attributeReady := cr.GetAnnotations()[attributeModified]
-	if !routeTableReady || !hostZoneReady || !attributeReady {
+	if !routeTableReady || !attributeReady {
 		return managed.ExternalObservation{
 			ResourceExists: true,
 			// vpc peering post processing not complete, forward to Update()
 			ResourceUpToDate: false,
 		}, errors.Wrap(e.kube.Status().Update(ctx, cr), errUpdateManagedStatus)
+	}
+	if !hostZoneReady {
+		e.log.WithValues("VpcPeering", cr.Name).Debug("Skip setting optional hosted zone")
 	}
 
 	if existedPeer.Status.Code == ec2.VpcPeeringConnectionStateReasonCodeActive && cr.GetCondition(ApprovedCondition).Status == corev1.ConditionTrue {
