@@ -445,13 +445,13 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 	}
 
 	if cr.Status.AtProvider.VPCPeeringConnectionID != nil {
-		err := e.deleteRoute(ctx, e.client, cr.Name, []string{*cr.Spec.ForProvider.VPCID}, *cr.Spec.ForProvider.PeerCIDR, cr.Status.AtProvider.VPCPeeringConnectionID)
+		err := deleteRoute(ctx, e.log, e.client, cr.Name, []string{*cr.Spec.ForProvider.VPCID}, *cr.Spec.ForProvider.PeerCIDR, cr.Status.AtProvider.VPCPeeringConnectionID)
 		if err != nil {
 			return err
 		}
 		if e.isInternal {
 			if cr.Status.AtProvider.RequesterVPCInfo != nil && cr.Status.AtProvider.RequesterVPCInfo.CIDRBlock != nil {
-				err := e.deleteRoute(ctx, e.peerClient, cr.Name, []string{*cr.Spec.ForProvider.PeerVPCID}, *cr.Status.AtProvider.RequesterVPCInfo.CIDRBlock, cr.Status.AtProvider.VPCPeeringConnectionID)
+				err := deleteRoute(ctx, e.log, e.peerClient, cr.Name, []string{*cr.Spec.ForProvider.PeerVPCID}, *cr.Status.AtProvider.RequesterVPCInfo.CIDRBlock, cr.Status.AtProvider.VPCPeeringConnectionID)
 				if err != nil {
 					return err
 				}
@@ -557,7 +557,7 @@ func (e *external) addRoute(ctx context.Context, client peering.EC2Client, name 
 	return nil
 }
 
-func (e *external) deleteRoute(ctx context.Context, client peering.EC2Client, name string, vpcIDs []string, peerCIDR string, pcx *string) error {
+func deleteRoute(ctx context.Context, log logging.Logger, client peering.EC2Client, name string, vpcIDs []string, peerCIDR string, pcx *string) error {
 	filter := ec2.Filter{
 		Name:   aws.String("vpc-id"),
 		Values: vpcIDs,
@@ -571,11 +571,11 @@ func (e *external) deleteRoute(ctx context.Context, client peering.EC2Client, na
 		return errors.Wrap(err, "describe RouteTables")
 	}
 
-	e.log.WithValues("VpcPeering", name).Debug("Describe RouteTables for deleting", "result", routeTablesRes.String())
+	log.WithValues("VpcPeering", name).Debug("Describe RouteTables for deleting", "result", routeTablesRes.String())
 	for _, rt := range routeTablesRes.RouteTables {
 		for _, r := range rt.Routes {
 			if r.VpcPeeringConnectionId != nil && pcx != nil && *r.VpcPeeringConnectionId == *pcx {
-				_, err := e.client.DeleteRouteRequest(&ec2.DeleteRouteInput{
+				_, err := client.DeleteRouteRequest(&ec2.DeleteRouteInput{
 					DestinationCidrBlock: aws.String(peerCIDR),
 
 					RouteTableId: rt.RouteTableId,
@@ -583,7 +583,7 @@ func (e *external) deleteRoute(ctx context.Context, client peering.EC2Client, na
 				if err != nil {
 					return errors.Wrap(err, "delete Route")
 				}
-				e.log.WithValues("VpcPeering", name).Debug("Delete route successful", "RouteTableId", rt.RouteTableId)
+				log.WithValues("VpcPeering", name).Debug("Delete route successful", "RouteTableId", rt.RouteTableId)
 			}
 		}
 	}
