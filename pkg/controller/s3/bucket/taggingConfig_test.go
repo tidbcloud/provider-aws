@@ -46,7 +46,8 @@ var (
 		Key:   "abc",
 		Value: "abc",
 	}
-	tags   = []v1beta1.Tag{tag, tag1, tag2}
+	tags = []v1beta1.Tag{tag, tag1, tag2}
+
 	awsTag = s3.Tag{
 		Key:   aws.String("test"),
 		Value: aws.String("value"),
@@ -61,6 +62,23 @@ var (
 	}
 	awsTags                   = []s3.Tag{awsTag, awsTag1, awsTag2}
 	_       SubresourceClient = &TaggingConfigurationClient{}
+
+	fooTag1 = s3.Tag{
+		Key:   aws.String("foo"),
+		Value: aws.String("123456"),
+	}
+	fooTag2 = s3.Tag{
+		Key:   aws.String("bar"),
+		Value: aws.String("34567"),
+	}
+	fooTag3 = s3.Tag{
+		Key:   aws.String("zoo"),
+		Value: aws.String("backup"),
+	}
+	fooTag4 = s3.Tag{
+		Key:   aws.String("foo"),
+		Value: aws.String("1234567"),
+	}
 )
 
 func generateTaggingConfig() *v1beta1.Tagging {
@@ -214,6 +232,32 @@ func TestTaggingObserve(t *testing.T) {
 				t.Errorf("r: -want, +got:\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestS3SubsetTags(t *testing.T) {
+	observedTags := []s3.Tag{fooTag1, fooTag2, fooTag3}
+	generatedTags := []s3.Tag{fooTag1, fooTag2}
+
+	result := IsSubsetTags(generatedTags, observedTags)
+	if !result {
+		t.Fatal("Expect generatedTags is subset of observedTags")
+	}
+
+	observedTags = []s3.Tag{fooTag2, fooTag3, fooTag4}
+	generatedTags = []s3.Tag{fooTag1, fooTag2}
+
+	result = IsSubsetTags(generatedTags, observedTags)
+	if result {
+		t.Fatal("Expect generatedTags is not a subset of observedTags")
+	}
+
+	observedTags = []s3.Tag{fooTag1, fooTag3}
+	generatedTags = []s3.Tag{fooTag1, fooTag2}
+
+	result = IsSubsetTags(generatedTags, observedTags)
+	if result {
+		t.Fatal("Expect generatedTags is not a subset of observedTags")
 	}
 }
 
