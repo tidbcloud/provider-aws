@@ -577,11 +577,12 @@ func deleteRoute(ctx context.Context, log logging.Logger, client peering.EC2Clie
 			if r.VpcPeeringConnectionId != nil && pcx != nil && *r.VpcPeeringConnectionId == *pcx {
 				_, err := client.DeleteRouteRequest(&ec2.DeleteRouteInput{
 					DestinationCidrBlock: aws.String(peerCIDR),
-
-					RouteTableId: rt.RouteTableId,
+					RouteTableId:         rt.RouteTableId,
 				}).Send(ctx)
 				if err != nil {
-					return errors.Wrap(err, "delete Route")
+					if !strings.Contains(err.Error(), "InvalidRoute.NotFound") {
+						return errors.Wrap(err, "delete Route")
+					}
 				}
 				log.WithValues("VpcPeering", name).Debug("Delete route successful", "RouteTableId", rt.RouteTableId)
 			}
