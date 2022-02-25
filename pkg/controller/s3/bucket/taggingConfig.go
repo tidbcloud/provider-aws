@@ -60,7 +60,7 @@ func (in *TaggingConfigurationClient) Observe(ctx context.Context, bucket *v1bet
 		return Updated, nil
 	case config == nil && len(external.TagSet) != 0:
 		return NeedsDeletion, nil
-	case !IsSubsetTags(GenerateTagging(config).TagSet, external.TagSet):
+	case IsSubsetTags(GenerateTagging(config).TagSet, external.TagSet):
 		return Updated, nil
 	default:
 		return NeedsUpdate, nil
