@@ -34,3 +34,17 @@ GOOS=linux go build -o docker/crossplane-aws-provider cmd/provider/main.go
 cd docker
 docker build -t $REGISTRY/provider-aws:v0.19.2-dev .
 ```
+
+# How to release
+
+```shell
+# Make the local branch up to date
+git checkout pingcap/provider-aws
+git pull origin pingcap/provider-aws
+
+# Change the version number
+git tag v0.1.0
+git push --tags
+```
+
+Then it will build and push the docker image automatically by GitHub Action. After the image is pushed, file a PR like this: https://github.com/tidbcloud/infra-cd/pull/651
