@@ -246,12 +246,15 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 	_, routeTableReady := cr.GetAnnotations()[routeTableEnsured]
 	_, hostZoneReady := cr.GetAnnotations()[hostedZoneEnsured]
 	_, attributeReady := cr.GetAnnotations()[attributeModified]
-	if !routeTableReady || !hostZoneReady || !attributeReady {
+	if !routeTableReady || !attributeReady {
 		return managed.ExternalObservation{
 			ResourceExists: true,
 			// vpc peering post processing not complete, forward to Update()
 			ResourceUpToDate: false,
 		}, errors.Wrap(e.kube.Status().Update(ctx, cr), errUpdateManagedStatus)
+	}
+	if !hostZoneReady {
+		e.log.WithValues("VpcPeering", cr.Name).Debug("Skip setting optional hosted zone")
 	}
 
 	if existedPeer.Status.Code == ec2types.VpcPeeringConnectionStateReasonCodeActive && cr.GetCondition(ApprovedCondition).Status == corev1.ConditionTrue {
@@ -380,7 +383,8 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 		}
 	}
 
-	if !hostZoneReady {
+	// // hostZoneID is optional
+	if !hostZoneReady && cr.Spec.ForProvider.HostZoneID != nil {
 		vpcAssociationAuthorizationInput := &route53.CreateVPCAssociationAuthorizationInput{
 			HostedZoneId: cr.Spec.ForProvider.HostZoneID,
 			VPC: &route53types.VPC{
@@ -427,26 +431,29 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 	}
 	cr.Status.SetConditions(xpv1.Deleting())
 
-	_, err := e.route53Client.DeleteVPCAssociationAuthorization(ctx, &route53.DeleteVPCAssociationAuthorizationInput{
-		HostedZoneId: cr.Spec.ForProvider.HostZoneID,
-		VPC: &route53types.VPC{
-			VPCId:     cr.Spec.ForProvider.PeerVPCID,
-			VPCRegion: route53types.VPCRegion(*cr.Spec.ForProvider.PeerRegion),
-		},
-	})
-	if err != nil && !strings.Contains(err.Error(), "VPCAssociationAuthorizationNotFound") {
-		return errors.Wrap(err, "delete VPCAssociationAuthorization")
+	// hostZoneID is optional
+	if cr.Spec.ForProvider.HostZoneID != nil {
+		_, err := e.route53Client.DeleteVPCAssociationAuthorizationRequest(&route53.DeleteVPCAssociationAuthorizationInput{
+			HostedZoneId: cr.Spec.ForProvider.HostZoneID,
+			VPC: &route53.VPC{
+				VPCId:     cr.Spec.ForProvider.PeerVPCID,
+				VPCRegion: route53.VPCRegion(*cr.Spec.ForProvider.PeerRegion),
+			},
+		}).Send(ctx)
+		if err != nil && !strings.Contains(err.Error(), "VPCAssociationAuthorizationNotFound") {
+			return errors.Wrap(err, "delete VPCAssociationAuthorization")
+		}
+		e.log.WithValues("VpcPeering", cr.Name).Debug("Delete VPCAssociationAuthorization successful")
 	}
-	e.log.WithValues("VpcPeering", cr.Name).Debug("Delete VPCAssociationAuthorization successful")
 
 	if cr.Status.AtProvider.VPCPeeringConnectionID != nil {
-		err := e.deleteRoute(ctx, e.client, cr.Name, []string{*cr.Spec.ForProvider.VPCID}, *cr.Spec.ForProvider.PeerCIDR, cr.Status.AtProvider.VPCPeeringConnectionID)
+		err := deleteRoute(ctx, e.log, e.client, cr.Name, []string{*cr.Spec.ForProvider.VPCID}, *cr.Spec.ForProvider.PeerCIDR, cr.Status.AtProvider.VPCPeeringConnectionID)
 		if err != nil {
 			return err
 		}
 		if e.isInternal {
 			if cr.Status.AtProvider.RequesterVPCInfo != nil && cr.Status.AtProvider.RequesterVPCInfo.CIDRBlock != nil {
-				err := e.deleteRoute(ctx, e.peerClient, cr.Name, []string{*cr.Spec.ForProvider.PeerVPCID}, *cr.Status.AtProvider.RequesterVPCInfo.CIDRBlock, cr.Status.AtProvider.VPCPeeringConnectionID)
+				err := deleteRoute(ctx, e.log, e.peerClient, cr.Name, []string{*cr.Spec.ForProvider.PeerVPCID}, *cr.Status.AtProvider.RequesterVPCInfo.CIDRBlock, cr.Status.AtProvider.VPCPeeringConnectionID)
 				if err != nil {
 					return err
 				}
@@ -456,7 +463,7 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 		}
 	}
 
-	err = e.deleteVPCPeeringConnection(ctx, cr)
+	err := e.deleteVPCPeeringConnection(ctx, cr)
 
 	return errors.Wrap(err, "delete VPCPeeringConnection")
 }
@@ -552,8 +559,7 @@ func (e *external) addRoute(ctx context.Context, client peering.EC2Client, name 
 	return nil
 }
 
-func (e *external) deleteRoute(ctx context.Context, client peering.EC2Client, name string, vpcIDs []string, peerCIDR string, pcx *string) error {
-	filter := ec2types.Filter{
+func deleteRoute(ctx context.Context, log logging.Logger, client peering.EC2Client, name string, vpcIDs []string, peerCIDR string, pcx *string) error {
 		Name:   aws.String("vpc-id"),
 		Values: vpcIDs,
 	}
@@ -566,19 +572,20 @@ func (e *external) deleteRoute(ctx context.Context, client peering.EC2Client, na
 		return errors.Wrap(err, "describe RouteTables")
 	}
 
-	e.log.WithValues("VpcPeering", name).Debug("Describe RouteTables for deleting")
+	log.WithValues("VpcPeering", name).Debug("Describe RouteTables for deleting", "result", routeTablesRes.String())
 	for _, rt := range routeTablesRes.RouteTables {
 		for _, r := range rt.Routes {
 			if r.VpcPeeringConnectionId != nil && pcx != nil && *r.VpcPeeringConnectionId == *pcx {
-				_, err := e.client.DeleteRoute(ctx, &ec2.DeleteRouteInput{
+				_, err := client.DeleteRouteRequest(&ec2.DeleteRouteInput{
 					DestinationCidrBlock: aws.String(peerCIDR),
-
-					RouteTableId: rt.RouteTableId,
-				})
+					RouteTableId:         rt.RouteTableId,
+				}).Send(ctx)
 				if err != nil {
-					return errors.Wrap(err, "delete Route")
+					if !strings.Contains(err.Error(), "InvalidRoute.NotFound") {
+						return errors.Wrap(err, "delete Route")
+					}
 				}
-				e.log.WithValues("VpcPeering", name).Debug("Delete route successful", "RouteTableId", rt.RouteTableId)
+				log.WithValues("VpcPeering", name).Debug("Delete route successful", "RouteTableId", rt.RouteTableId)
 			}
 		}
 	}

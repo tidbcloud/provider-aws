@@ -691,6 +691,61 @@ func TestDelete(t *testing.T) {
 				err: nil,
 			},
 		},
+		"EmptyHostedZone": {
+			args: args{
+				kube: &test.MockClient{
+					MockDelete: test.NewMockClient().Delete,
+				},
+				route53Cli: &fake.MockRoute53Client{
+					// When the function is called, it will return an error directly. if host zone is empty, this function should not be called
+					DeleteVPCAssociationAuthorizationRequestFun: func(input *route53.DeleteVPCAssociationAuthorizationInput) route53.DeleteVPCAssociationAuthorizationRequest {
+						return route53.DeleteVPCAssociationAuthorizationRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &route53.DeleteVPCAssociationAuthorizationOutput{}, Error: fmt.Errorf("missing required field, DeleteVPCAssociationAuthorizationInput.HostedZoneId")},
+						}
+					},
+				},
+				cr: hostedZoneEmptyVPCPeerConnection("hostzone-zone-empty"),
+				client: &fake.MockEC2Client{
+					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+						return ec2.DescribeRouteTablesRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
+								RouteTables: make([]ec2.RouteTable, 0),
+							}},
+						}
+					},
+					DescribeVpcPeeringConnectionsRequestFun: func(input *ec2.DescribeVpcPeeringConnectionsInput) ec2.DescribeVpcPeeringConnectionsRequest {
+						return ec2.DescribeVpcPeeringConnectionsRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeVpcPeeringConnectionsOutput{
+								//Attributes: attributes,
+								VpcPeeringConnections: []ec2.VpcPeeringConnection{
+									{
+										Status: &ec2.VpcPeeringConnectionStateReason{
+											Code: ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance,
+										},
+
+										Tags: []ec2.Tag{
+											{
+												Key:   aws.String("Name"),
+												Value: aws.String("test"),
+											},
+										},
+										VpcPeeringConnectionId: aws.String("pcx-xxx"),
+									},
+								},
+							}},
+						}
+					},
+					DeleteVpcPeeringConnectionRequestFun: func(input *ec2.DeleteVpcPeeringConnectionInput) ec2.DeleteVpcPeeringConnectionRequest {
+						return ec2.DeleteVpcPeeringConnectionRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DeleteVpcPeeringConnectionOutput{}},
+						}
+					},
+				},
+			},
+			want: want{
+				err: nil,
+			},
+		},
 	}
 
 	for name, tc := range cases {
@@ -1004,5 +1059,12 @@ func inDeletingVPCPeerConnection(name string) *svcapitypes.VPCPeeringConnection 
 	cr := buildVPCPeerConnection(name)
 
 	cr.DeletionTimestamp = &v1.Time{time.Now()}
+	return cr
+}
+
+func hostedZoneEmptyVPCPeerConnection(name string) *svcapitypes.VPCPeeringConnection {
+	cr := buildVPCPeerConnection(name)
+	// set hostedZone to empty
+	cr.Spec.ForProvider.HostZoneID = nil
 	return cr
 }

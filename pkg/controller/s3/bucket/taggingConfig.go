@@ -18,6 +18,7 @@ package bucket
 
 import (
 	"context"
+	"github.com/aws/aws-sdk-go/aws"
 
 	"github.com/aws/smithy-go/document"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -26,8 +27,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
-	"github.com/google/go-cmp/cmp"
-
 	"github.com/crossplane/provider-aws/apis/s3/v1beta1"
 	awsclient "github.com/crossplane/provider-aws/pkg/clients"
 	"github.com/crossplane/provider-aws/pkg/clients/s3"
@@ -65,11 +64,28 @@ func (in *TaggingConfigurationClient) Observe(ctx context.Context, bucket *v1bet
 		return Updated, nil
 	case config == nil && len(external.TagSet) != 0:
 		return NeedsDeletion, nil
-	case cmp.Equal(s3.SortS3TagSet(external.TagSet), s3.SortS3TagSet(GenerateTagging(config).TagSet), cmpopts.IgnoreTypes(document.NoSerde{})):
+	case IsSubsetTags(GenerateTagging(config).TagSet, external.TagSet):
 		return Updated, nil
 	default:
 		return NeedsUpdate, nil
 	}
+}
+
+func IsSubsetTags(generatedTagSet []awss3.Tag, externalTagSets []awss3.Tag) bool {
+	for _, tag := range generatedTagSet {
+		found := false
+		for _, externalTagSet := range externalTagSets {
+			if aws.StringValue(tag.Key) == aws.StringValue(externalTagSet.Key) &&
+				aws.StringValue(tag.Value) == aws.StringValue(externalTagSet.Value) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 // CreateOrUpdate sends a request to have resource created on AWS
