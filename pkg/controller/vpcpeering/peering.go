@@ -237,6 +237,8 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 				}
 			}
 		} else {
+			// let peering status change from available to unavailable, sometimes user can delete peering in aws provider
+			cr.Status.SetConditions(xpv1.Unavailable())
 			// If vpc peering connection status is pending acceptance, modify vpc peering attributes request will failed.
 			// In order to reduce the API request to AWS, return errors early to avoid unnecessary API requests.
 			return managed.ExternalObservation{ResourceExists: true}, fmt.Errorf(errWaitVpcPeeringConnectionAccept)
@@ -433,13 +435,13 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error { //
 
 	// hostZoneID is optional
 	if cr.Spec.ForProvider.HostZoneID != nil {
-		_, err := e.route53Client.DeleteVPCAssociationAuthorizationRequest(&route53.DeleteVPCAssociationAuthorizationInput{
+		_, err := e.route53Client.DeleteVPCAssociationAuthorization(ctx, &route53.DeleteVPCAssociationAuthorizationInput{
 			HostedZoneId: cr.Spec.ForProvider.HostZoneID,
-			VPC: &route53.VPC{
+			VPC: &route53types.VPC{
 				VPCId:     cr.Spec.ForProvider.PeerVPCID,
-				VPCRegion: route53.VPCRegion(*cr.Spec.ForProvider.PeerRegion),
+				VPCRegion: route53types.VPCRegion(*cr.Spec.ForProvider.PeerRegion),
 			},
-		}).Send(ctx)
+		})
 		if err != nil && !strings.Contains(err.Error(), "VPCAssociationAuthorizationNotFound") {
 			return errors.Wrap(err, "delete VPCAssociationAuthorization")
 		}
@@ -560,6 +562,7 @@ func (e *external) addRoute(ctx context.Context, client peering.EC2Client, name 
 }
 
 func deleteRoute(ctx context.Context, log logging.Logger, client peering.EC2Client, name string, vpcIDs []string, peerCIDR string, pcx *string) error {
+	filter := ec2types.Filter{
 		Name:   aws.String("vpc-id"),
 		Values: vpcIDs,
 	}
@@ -572,14 +575,13 @@ func deleteRoute(ctx context.Context, log logging.Logger, client peering.EC2Clie
 		return errors.Wrap(err, "describe RouteTables")
 	}
 
-	log.WithValues("VpcPeering", name).Debug("Describe RouteTables for deleting", "result", routeTablesRes.String())
 	for _, rt := range routeTablesRes.RouteTables {
 		for _, r := range rt.Routes {
 			if r.VpcPeeringConnectionId != nil && pcx != nil && *r.VpcPeeringConnectionId == *pcx {
-				_, err := client.DeleteRouteRequest(&ec2.DeleteRouteInput{
+				_, err := client.DeleteRoute(ctx, &ec2.DeleteRouteInput{
 					DestinationCidrBlock: aws.String(peerCIDR),
 					RouteTableId:         rt.RouteTableId,
-				}).Send(ctx)
+				})
 				if err != nil {
 					if !strings.Contains(err.Error(), "InvalidRoute.NotFound") {
 						return errors.Wrap(err, "delete Route")

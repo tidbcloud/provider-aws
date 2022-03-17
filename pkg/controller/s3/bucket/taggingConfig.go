@@ -18,10 +18,8 @@ package bucket
 
 import (
 	"context"
-	"github.com/aws/aws-sdk-go/aws"
 
-	"github.com/aws/smithy-go/document"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/aws/aws-sdk-go/aws"
 
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -71,7 +69,7 @@ func (in *TaggingConfigurationClient) Observe(ctx context.Context, bucket *v1bet
 	}
 }
 
-func IsSubsetTags(generatedTagSet []awss3.Tag, externalTagSets []awss3.Tag) bool {
+func IsSubsetTags(generatedTagSet []types.Tag, externalTagSets []types.Tag) bool {
 	for _, tag := range generatedTagSet {
 		found := false
 		for _, externalTagSet := range externalTagSets {
