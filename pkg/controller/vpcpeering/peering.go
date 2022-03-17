@@ -235,6 +235,8 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 				}
 			}
 		} else {
+			// let peering status change from available to unavailable, sometimes user can delete peering in aws provider
+			cr.Status.SetConditions(xpv1.Unavailable())
 			// If vpc peering connection status is pending acceptance, modify vpc peering attributes request will failed.
 			// In order to reduce the API request to AWS, return errors early to avoid unnecessary API requests.
 			return managed.ExternalObservation{ResourceExists: true}, fmt.Errorf(errWaitVpcPeeringConnectionAccept)
