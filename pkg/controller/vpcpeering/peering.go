@@ -557,6 +557,7 @@ func (e *external) addRoute(ctx context.Context, client peering.EC2Client, name 
 									}
 								}
 								e.log.WithValues("VpcPeering", name).Debug("Delete route successful", "RouteTableId", rt.RouteTableId)
+								continue
 							}
 
 							return errors.Wrap(err, fmt.Sprintf("failed add route for vpc peering connection: %s, routeID: %s", *pcx, *rt.RouteTableId))
