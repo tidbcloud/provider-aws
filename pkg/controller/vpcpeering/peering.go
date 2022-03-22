@@ -532,6 +532,23 @@ func (e *external) addRoute(ctx context.Context, client peering.EC2Client, name 
 			DestinationCidrBlock:   aws.String(peerCIDR),
 			VpcPeeringConnectionId: pcx,
 		}
+
+		// If the route table exists, and the state is blackhole, remove it.
+		for _, route := range rt.Routes {
+			if route.DestinationCidrBlock != nil && *route.DestinationCidrBlock == peerCIDR && route.State == ec2.RouteStateBlackhole {
+				_, err := client.DeleteRouteRequest(&ec2.DeleteRouteInput{
+					DestinationCidrBlock: aws.String(peerCIDR),
+					RouteTableId:         rt.RouteTableId,
+				}).Send(ctx)
+				if err != nil {
+					if !strings.Contains(err.Error(), "InvalidRoute.NotFound") {
+						return errors.Wrap(err, "delete Route")
+					}
+				}
+				e.log.WithValues("VpcPeering", name).Debug("Delete route successful", "RouteTableId", rt.RouteTableId)
+			}
+		}
+
 		_, err := client.CreateRouteRequest(createRouteInput).Send(ctx)
 		if err != nil {
 			// FIXME: The error is not aws.Err type?
@@ -545,21 +562,6 @@ func (e *external) addRoute(ctx context.Context, client peering.EC2Client, name 
 							e.log.WithValues("VpcPeering", name).Debug("Route already exist, no need to recreate", "RouteTableId", rt.RouteTableId, "DestinationCidrBlock", *route.DestinationCidrBlock)
 							continue
 						} else {
-							// If the route table exists, and the state is blackhole, remove it.
-							if route.State == ec2.RouteStateBlackhole {
-								_, err := client.DeleteRouteRequest(&ec2.DeleteRouteInput{
-									DestinationCidrBlock: aws.String(peerCIDR),
-									RouteTableId:         rt.RouteTableId,
-								}).Send(ctx)
-								if err != nil {
-									if !strings.Contains(err.Error(), "InvalidRoute.NotFound") {
-										return errors.Wrap(err, "delete Route")
-									}
-								}
-								e.log.WithValues("VpcPeering", name).Debug("Delete route successful", "RouteTableId", rt.RouteTableId)
-								continue
-							}
-
 							return errors.Wrap(err, fmt.Sprintf("failed add route for vpc peering connection: %s, routeID: %s", *pcx, *rt.RouteTableId))
 						}
 					}
