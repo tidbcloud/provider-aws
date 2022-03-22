@@ -936,6 +936,55 @@ func TestUpdateRouteTable(t *testing.T) {
 				err:    fmt.Errorf("failed add route for vpc peering connection: my-peering-id, routeID: rt1: RouteAlreadyExists"),
 			},
 		},
+		"Create route already exist but route cidr already occupied, but the record status is blackhole": {
+			args: args{
+				kube: &test.MockClient{
+					MockUpdate: test.NewMockClient().Update,
+					MockStatusUpdate: func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return nil
+					},
+				},
+				route53Cli: &fake.MockRoute53Client{},
+				cr:         pc.DeepCopy(),
+				client: &fake.MockEC2Client{
+					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
+						g.Expect(len(input.Filters)).Should(Equal(1))
+						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
+						g.Expect(input.Filters[0].Values).Should((Equal([]string{"ownerVpc"})))
+						return ec2.DescribeRouteTablesRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DescribeRouteTablesOutput{
+								RouteTables: []ec2.RouteTable{
+									{
+										RouteTableId: aws.String("rt1"),
+										Routes: []ec2.Route{
+											{
+												DestinationCidrBlock:   aws.String("10.0.0.0/8"),
+												VpcPeeringConnectionId: aws.String("other-peering"),
+												State:                  ec2.RouteStateBlackhole,
+											},
+										},
+									},
+								},
+							}},
+						}
+					},
+					CreateRouteRequestFun: func(input *ec2.CreateRouteInput) ec2.CreateRouteRequest {
+						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt1"))))
+						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("10.0.0.0/8"))))
+						g.Expect(input.VpcPeeringConnectionId).Should((Equal(aws.String(peeringConnectionID))))
+						return ec2.CreateRouteRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.CreateRouteOutput{
+								Return: aws.Bool(false),
+							}, Error: fmt.Errorf("RouteAlreadyExists")},
+						}
+					},
+				},
+			},
+			want: want{
+				result: managed.ExternalUpdate{},
+				err:    fmt.Errorf("failed add route for vpc peering connection: my-peering-id, routeID: rt1: RouteAlreadyExists"),
+			},
+		},
 		"Create route when internal vpc peering": {
 			args: args{
 				isInternal: true,
