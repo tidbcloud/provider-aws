@@ -947,6 +947,13 @@ func TestUpdateRouteTable(t *testing.T) {
 				route53Cli: &fake.MockRoute53Client{},
 				cr:         pc.DeepCopy(),
 				client: &fake.MockEC2Client{
+					DeleteRouteRequestFun: func(input *ec2.DeleteRouteInput) ec2.DeleteRouteRequest {
+						g.Expect(input.RouteTableId).Should((Equal(aws.String("rt1"))))
+						g.Expect(input.DestinationCidrBlock).Should((Equal(aws.String("10.0.0.0/8"))))
+						return ec2.DeleteRouteRequest{
+							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.DeleteRouteOutput{}},
+						}
+					},
 					DescribeRouteTablesRequestFun: func(input *ec2.DescribeRouteTablesInput) ec2.DescribeRouteTablesRequest {
 						g.Expect(len(input.Filters)).Should(Equal(1))
 						g.Expect(input.Filters[0].Name).Should((Equal(aws.String("vpc-id"))))
@@ -974,15 +981,15 @@ func TestUpdateRouteTable(t *testing.T) {
 						g.Expect(input.VpcPeeringConnectionId).Should((Equal(aws.String(peeringConnectionID))))
 						return ec2.CreateRouteRequest{
 							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &ec2.CreateRouteOutput{
-								Return: aws.Bool(false),
-							}, Error: fmt.Errorf("RouteAlreadyExists")},
+								Return: aws.Bool(true),
+							}},
 						}
 					},
 				},
 			},
 			want: want{
 				result: managed.ExternalUpdate{},
-				err:    fmt.Errorf("failed add route for vpc peering connection: my-peering-id, routeID: rt1: RouteAlreadyExists"),
+				err:    nil,
 			},
 		},
 		"Create route when internal vpc peering": {

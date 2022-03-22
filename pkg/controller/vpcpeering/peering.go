@@ -545,7 +545,7 @@ func (e *external) addRoute(ctx context.Context, client peering.EC2Client, name 
 						return errors.Wrap(err, "delete Route")
 					}
 				}
-				e.log.WithValues("VpcPeering", name).Debug("Delete route successful", "RouteTableId", rt.RouteTableId)
+				e.log.WithValues("VpcPeering", name).Debug("Delete the occupied route whose route is in blackhole successful", "RouteTableId", rt.RouteTableId)
 			}
 		}
 
