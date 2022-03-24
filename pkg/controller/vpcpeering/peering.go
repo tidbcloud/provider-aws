@@ -539,11 +539,11 @@ func (e *external) addRoute(ctx context.Context, client peering.EC2Client, name 
 
 		// If the route table exists, and the state is blackhole, remove it.
 		for _, route := range rt.Routes {
-			if route.DestinationCidrBlock != nil && *route.DestinationCidrBlock == peerCIDR && route.State == ec2.RouteStateBlackhole {
-				_, err := client.DeleteRoute(&ec2.DeleteRouteInput{
+			if route.DestinationCidrBlock != nil && *route.DestinationCidrBlock == peerCIDR && route.State == ec2types.RouteStateBlackhole {
+				_, err := client.DeleteRoute(ctx, &ec2.DeleteRouteInput{
 					DestinationCidrBlock: aws.String(peerCIDR),
 					RouteTableId:         rt.RouteTableId,
-				}).Send(ctx)
+				})
 				if err != nil {
 					if !strings.Contains(err.Error(), "InvalidRoute.NotFound") {
 						return errors.Wrap(err, "delete Route")
@@ -553,7 +553,7 @@ func (e *external) addRoute(ctx context.Context, client peering.EC2Client, name 
 			}
 		}
 
-		_, err := client.CreateRoute(createRouteInput)
+		_, err := client.CreateRoute(ctx, createRouteInput)
 		if err != nil {
 			// FIXME: The error is not aws.Err type?
 			if !strings.Contains(err.Error(), "RouteAlreadyExists") {
