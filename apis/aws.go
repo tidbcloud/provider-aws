@@ -29,6 +29,7 @@ import (
 	elbv2v1alpha1 "github.com/crossplane/provider-aws/apis/elbv2/v1alpha1"
 	iamv1beta1 "github.com/crossplane/provider-aws/apis/iam/v1beta1"
 	kmsv1alpha1 "github.com/crossplane/provider-aws/apis/kms/v1alpha1"
+	lambdav1alpha1 "github.com/crossplane/provider-aws/apis/lambda/v1alpha1"
 	route53v1alpha1 "github.com/crossplane/provider-aws/apis/route53/v1alpha1"
 	s3v1alpha2 "github.com/crossplane/provider-aws/apis/s3/v1alpha3"
 	s3v1beta1 "github.com/crossplane/provider-aws/apis/s3/v1beta1"
@@ -53,6 +54,7 @@ func init() {
 		sqsv1beta1.SchemeBuilder.AddToScheme,
 		kmsv1alpha1.SchemeBuilder.AddToScheme,
 		ec2v1alpha1.SchemeBuilder.AddToScheme,
+		lambdav1alpha1.SchemeBuilder.AddToScheme,
 		peeringv1alpha1.SchemeBuilder.AddToScheme,
 		eksv1beta1.SchemeBuilder.AddToScheme,
 		eksv1alpha1.SchemeBuilder.AddToScheme,
