@@ -31,6 +31,8 @@ import (
 
 	"github.com/crossplane/provider-aws/pkg/controller/config"
 	"github.com/crossplane/provider-aws/pkg/controller/ec2/vpc"
+	"github.com/crossplane/provider-aws/pkg/controller/ec2/vpcendpoint"
+	"github.com/crossplane/provider-aws/pkg/controller/ec2/vpcendpointserviceconfiguration"
 	"github.com/crossplane/provider-aws/pkg/controller/eks"
 	"github.com/crossplane/provider-aws/pkg/controller/eks/nodegroup"
 	"github.com/crossplane/provider-aws/pkg/controller/elasticloadbalancing/elb"
@@ -63,6 +65,8 @@ func Setup(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll ti
 		role.SetupRole,
 		rolepolicyattachment.SetupRolePolicyAttachment,
 		function.SetupFunction,
+		vpcendpoint.SetupVPCEndpoint,
+		vpcendpointserviceconfiguration.SetupVPCEndpointServiceConfiguration,
 	} {
 		if err := setup(mgr, l, rl, poll); err != nil {
 			return err
