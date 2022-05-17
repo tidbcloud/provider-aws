@@ -18,6 +18,7 @@ package activity
 
 import (
 	"context"
+	"time"
 
 	svcsdk "github.com/aws/aws-sdk-go/service/sfn"
 	"k8s.io/client-go/util/workqueue"
@@ -37,7 +38,7 @@ import (
 )
 
 // SetupActivity adds a controller that reconciles Activity.
-func SetupActivity(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
+func SetupActivity(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll time.Duration) error {
 	name := managed.ControllerName(svcapitypes.ActivityGroupKind)
 	opts := []option{
 		func(e *external) {
@@ -50,13 +51,14 @@ func SetupActivity(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter)
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter: ratelimiter.NewDefaultManagedRateLimiter(rl),
+			RateLimiter: ratelimiter.NewController(rl),
 		}).
 		For(&svcapitypes.Activity{}).
 		Complete(managed.NewReconciler(mgr,
 			resource.ManagedKind(svcapitypes.ActivityGroupVersionKind),
 			managed.WithExternalConnecter(&connector{kube: mgr.GetClient(), opts: opts}),
-			managed.WithInitializers(managed.NewDefaultProviderConfig(mgr.GetClient())),
+			managed.WithInitializers(),
+			managed.WithPollInterval(poll),
 			managed.WithLogger(l.WithValues("controller", name)),
 			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
@@ -79,11 +81,10 @@ func postCreate(_ context.Context, cr *svcapitypes.Activity, resp *svcsdk.Create
 		return managed.ExternalCreation{}, err
 	}
 	meta.SetExternalName(cr, aws.StringValue(resp.ActivityArn))
-	cre.ExternalNameAssigned = true
 	return cre, nil
 }
 
-func preDelete(_ context.Context, cr *svcapitypes.Activity, obj *svcsdk.DeleteActivityInput) error {
+func preDelete(_ context.Context, cr *svcapitypes.Activity, obj *svcsdk.DeleteActivityInput) (bool, error) {
 	obj.ActivityArn = aws.String(meta.GetExternalName(cr))
-	return nil
+	return false, nil
 }

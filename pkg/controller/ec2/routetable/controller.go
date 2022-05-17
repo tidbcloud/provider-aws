@@ -18,9 +18,11 @@ package routetable
 
 import (
 	"context"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
+	awsec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"k8s.io/client-go/util/workqueue"
@@ -59,21 +61,23 @@ const (
 )
 
 // SetupRouteTable adds a controller that reconciles RouteTables.
-func SetupRouteTable(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
+func SetupRouteTable(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll time.Duration) error {
 	name := managed.ControllerName(v1beta1.RouteTableGroupKind)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter: ratelimiter.NewDefaultManagedRateLimiter(rl),
+			RateLimiter: ratelimiter.NewController(rl),
 		}).
 		For(&v1beta1.RouteTable{}).
 		Complete(managed.NewReconciler(mgr,
 			resource.ManagedKind(v1beta1.RouteTableGroupVersionKind),
 			managed.WithExternalConnecter(&connector{kube: mgr.GetClient(), newClientFn: ec2.NewRouteTableClient}),
+			managed.WithCreationGracePeriod(3*time.Minute),
 			managed.WithReferenceResolver(managed.NewAPISimpleReferenceResolver(mgr.GetClient())),
-			managed.WithInitializers(managed.NewDefaultProviderConfig(mgr.GetClient())),
+			managed.WithInitializers(),
 			managed.WithConnectionPublishers(),
+			managed.WithPollInterval(poll),
 			managed.WithLogger(l.WithValues("controller", name)),
 			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
@@ -92,11 +96,10 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	if err != nil {
 		return nil, err
 	}
-	return &external{client: c.newClientFn(*cfg), kube: c.kube}, nil
+	return &external{client: c.newClientFn(*cfg)}, nil
 }
 
 type external struct {
-	kube   client.Client
 	client ec2.RouteTableClient
 }
 
@@ -115,9 +118,9 @@ func (e *external) Observe(ctx context.Context, mgd resource.Managed) (managed.E
 		}, nil
 	}
 
-	response, err := e.client.DescribeRouteTablesRequest(&awsec2.DescribeRouteTablesInput{
+	response, err := e.client.DescribeRouteTables(ctx, &awsec2.DescribeRouteTablesInput{
 		RouteTableIds: []string{meta.GetExternalName(cr)},
-	}).Send(ctx)
+	})
 
 	if err != nil {
 		return managed.ExternalObservation{}, awsclient.Wrap(resource.Ignore(ec2.IsRouteTableNotFoundErr, err), errDescribe)
@@ -134,7 +137,7 @@ func (e *external) Observe(ctx context.Context, mgd resource.Managed) (managed.E
 
 	stateAvailable := true
 	for _, rt := range observed.Routes {
-		if rt.State != awsec2.RouteStateActive {
+		if rt.State != awsec2types.RouteStateActive {
 			stateAvailable = false
 			break
 		}
@@ -162,14 +165,14 @@ func (e *external) Create(ctx context.Context, mgd resource.Managed) (managed.Ex
 	if !ok {
 		return managed.ExternalCreation{}, errors.New(errUnexpectedObject)
 	}
-	result, err := e.client.CreateRouteTableRequest(&awsec2.CreateRouteTableInput{
+	result, err := e.client.CreateRouteTable(ctx, &awsec2.CreateRouteTableInput{
 		VpcId: cr.Spec.ForProvider.VPCID,
-	}).Send(ctx)
+	})
 	if err != nil {
 		return managed.ExternalCreation{}, awsclient.Wrap(err, errCreate)
 	}
-	meta.SetExternalName(cr, aws.StringValue(result.RouteTable.RouteTableId))
-	return managed.ExternalCreation{ExternalNameAssigned: true}, nil
+	meta.SetExternalName(cr, aws.ToString(result.RouteTable.RouteTableId))
+	return managed.ExternalCreation{}, nil
 }
 
 func (e *external) Update(ctx context.Context, mgd resource.Managed) (managed.ExternalUpdate, error) { // nolint:gocyclo
@@ -178,9 +181,9 @@ func (e *external) Update(ctx context.Context, mgd resource.Managed) (managed.Ex
 		return managed.ExternalUpdate{}, errors.New(errUnexpectedObject)
 	}
 
-	response, err := e.client.DescribeRouteTablesRequest(&awsec2.DescribeRouteTablesInput{
+	response, err := e.client.DescribeRouteTables(ctx, &awsec2.DescribeRouteTablesInput{
 		RouteTableIds: []string{meta.GetExternalName(cr)},
-	}).Send(ctx)
+	})
 
 	if err != nil {
 		return managed.ExternalUpdate{}, awsclient.Wrap(resource.Ignore(ec2.IsRouteTableNotFoundErr, err), errDescribe)
@@ -201,18 +204,18 @@ func (e *external) Update(ctx context.Context, mgd resource.Managed) (managed.Ex
 		// tagging the RouteTable
 		addTags, removeTags := awsclient.DiffEC2Tags(v1beta1.GenerateEC2Tags(cr.Spec.ForProvider.Tags), table.Tags)
 		if len(addTags) > 0 {
-			if _, err := e.client.CreateTagsRequest(&awsec2.CreateTagsInput{
+			if _, err := e.client.CreateTags(ctx, &awsec2.CreateTagsInput{
 				Resources: []string{meta.GetExternalName(cr)},
 				Tags:      addTags,
-			}).Send(ctx); err != nil {
+			}); err != nil {
 				return managed.ExternalUpdate{}, awsclient.Wrap(err, errCreateTags)
 			}
 		}
 		if len(removeTags) > 0 {
-			if _, err := e.client.DeleteTagsRequest(&awsec2.DeleteTagsInput{
+			if _, err := e.client.DeleteTags(ctx, &awsec2.DeleteTagsInput{
 				Resources: []string{meta.GetExternalName(cr)},
 				Tags:      removeTags,
-			}).Send(ctx); err != nil {
+			}); err != nil {
 				return managed.ExternalUpdate{}, awsclient.Wrap(err, errDeleteTags)
 			}
 		}
@@ -248,24 +251,24 @@ func (e *external) Delete(ctx context.Context, mgd resource.Managed) error {
 		return err
 	}
 
-	_, err := e.client.DeleteRouteTableRequest(&awsec2.DeleteRouteTableInput{
+	_, err := e.client.DeleteRouteTable(ctx, &awsec2.DeleteRouteTableInput{
 		RouteTableId: aws.String(meta.GetExternalName(cr)),
-	}).Send(ctx)
+	})
 
 	return awsclient.Wrap(resource.Ignore(ec2.IsRouteTableNotFoundErr, err), errDelete)
 }
 
-func (e *external) deleteRoutes(ctx context.Context, tableID string, desired []v1beta1.Route, observed []v1beta1.RouteState) error { // nolint:gocyclo
+func (e *external) deleteRoutes(ctx context.Context, tableID string, desired []v1beta1.RouteBeta, observed []v1beta1.RouteState) error { // nolint:gocyclo
 	for _, rt := range observed {
 		found := false
 		for _, ds := range desired {
-			if aws.StringValue(ds.DestinationCIDRBlock) == rt.DestinationCIDRBlock && (aws.StringValue(ds.GatewayID) == rt.GatewayID &&
-				aws.StringValue(ds.InstanceID) == rt.InstanceID &&
-				aws.StringValue(ds.LocalGatewayID) == rt.LocalGatewayID &&
-				aws.StringValue(ds.NatGatewayID) == rt.NatGatewayID &&
-				aws.StringValue(ds.NetworkInterfaceID) == rt.NetworkInterfaceID &&
-				aws.StringValue(ds.TransitGatewayID) == rt.TransitGatewayID &&
-				aws.StringValue(ds.VpcPeeringConnectionID) == rt.VpcPeeringConnectionID) {
+			if aws.ToString(ds.DestinationCIDRBlock) == rt.DestinationCIDRBlock && (aws.ToString(ds.GatewayID) == rt.GatewayID &&
+				aws.ToString(ds.InstanceID) == rt.InstanceID &&
+				aws.ToString(ds.LocalGatewayID) == rt.LocalGatewayID &&
+				aws.ToString(ds.NatGatewayID) == rt.NatGatewayID &&
+				aws.ToString(ds.NetworkInterfaceID) == rt.NetworkInterfaceID &&
+				aws.ToString(ds.TransitGatewayID) == rt.TransitGatewayID &&
+				aws.ToString(ds.VpcPeeringConnectionID) == rt.VpcPeeringConnectionID) {
 
 				found = true
 				break
@@ -273,19 +276,19 @@ func (e *external) deleteRoutes(ctx context.Context, tableID string, desired []v
 		}
 		if !found && rt.GatewayID != ec2.DefaultLocalGatewayID {
 			if rt.DestinationCIDRBlock != "" {
-				_, err := e.client.DeleteRouteRequest(&awsec2.DeleteRouteInput{
+				_, err := e.client.DeleteRoute(ctx, &awsec2.DeleteRouteInput{
 					RouteTableId:         aws.String(tableID),
 					DestinationCidrBlock: aws.String(rt.DestinationCIDRBlock),
-				}).Send(ctx)
+				})
 
 				if err != nil {
 					return err
 				}
 			} else {
-				_, err := e.client.DeleteRouteRequest(&awsec2.DeleteRouteInput{
+				_, err := e.client.DeleteRoute(ctx, &awsec2.DeleteRouteInput{
 					RouteTableId:             aws.String(tableID),
 					DestinationIpv6CidrBlock: aws.String(rt.DestinationIPV6CIDRBlock),
-				}).Send(ctx)
+				})
 
 				if err != nil {
 					return err
@@ -296,35 +299,35 @@ func (e *external) deleteRoutes(ctx context.Context, tableID string, desired []v
 	return nil
 }
 
-func (e *external) createRoutes(ctx context.Context, tableID string, desired []v1beta1.Route, observed []v1beta1.RouteState) error { // nolint:gocyclo
+func (e *external) createRoutes(ctx context.Context, tableID string, desired []v1beta1.RouteBeta, observed []v1beta1.RouteState) error { // nolint:gocyclo
 	for _, rt := range desired {
 		isObserved := false
 		for _, ob := range observed {
-			if ob.DestinationCIDRBlock == aws.StringValue(rt.DestinationCIDRBlock) && (ob.GatewayID == aws.StringValue(rt.GatewayID) &&
-				ob.InstanceID == aws.StringValue(rt.InstanceID) &&
-				ob.LocalGatewayID == aws.StringValue(rt.LocalGatewayID) &&
-				ob.NatGatewayID == aws.StringValue(rt.NatGatewayID) &&
-				ob.NetworkInterfaceID == aws.StringValue(rt.NetworkInterfaceID) &&
-				ob.TransitGatewayID == aws.StringValue(rt.TransitGatewayID) &&
-				ob.VpcPeeringConnectionID == aws.StringValue(rt.VpcPeeringConnectionID)) {
+			if ob.DestinationCIDRBlock == aws.ToString(rt.DestinationCIDRBlock) && (ob.GatewayID == aws.ToString(rt.GatewayID) &&
+				ob.InstanceID == aws.ToString(rt.InstanceID) &&
+				ob.LocalGatewayID == aws.ToString(rt.LocalGatewayID) &&
+				ob.NatGatewayID == aws.ToString(rt.NatGatewayID) &&
+				ob.NetworkInterfaceID == aws.ToString(rt.NetworkInterfaceID) &&
+				ob.TransitGatewayID == aws.ToString(rt.TransitGatewayID) &&
+				ob.VpcPeeringConnectionID == aws.ToString(rt.VpcPeeringConnectionID)) {
 				isObserved = true
 				break
 			}
 		}
 		// if the route is already created, skip it
 		if !isObserved {
-			_, err := e.client.CreateRouteRequest(&awsec2.CreateRouteInput{
+			_, err := e.client.CreateRoute(ctx, &awsec2.CreateRouteInput{
 				RouteTableId:             aws.String(tableID),
 				DestinationCidrBlock:     rt.DestinationCIDRBlock,
-				DestinationIpv6CidrBlock: rt.DestinationIPV6CIDRBlock,
 				GatewayId:                rt.GatewayID,
+				DestinationIpv6CidrBlock: rt.DestinationIPV6CIDRBlock,
 				InstanceId:               rt.InstanceID,
 				LocalGatewayId:           rt.LocalGatewayID,
 				NatGatewayId:             rt.NatGatewayID,
 				NetworkInterfaceId:       rt.NetworkInterfaceID,
 				TransitGatewayId:         rt.TransitGatewayID,
 				VpcPeeringConnectionId:   rt.VpcPeeringConnectionID,
-			}).Send(ctx)
+			})
 
 			if err != nil {
 				return err
@@ -334,7 +337,7 @@ func (e *external) createRoutes(ctx context.Context, tableID string, desired []v
 	return nil
 }
 
-func (e *external) reconcileRoutes(ctx context.Context, tableID string, desired []v1beta1.Route, observed []v1beta1.RouteState) error {
+func (e *external) reconcileRoutes(ctx context.Context, tableID string, desired []v1beta1.RouteBeta, observed []v1beta1.RouteState) error {
 
 	if err := e.deleteRoutes(ctx, tableID, desired, observed); err != nil {
 		return awsclient.Wrap(err, errDeleteRoute)
@@ -351,7 +354,7 @@ func (e *external) removeAssociations(ctx context.Context, desired []v1beta1.Ass
 	for _, asc := range observed {
 		found := false
 		for _, ds := range desired {
-			if asc.SubnetID == aws.StringValue(ds.SubnetID) {
+			if asc.SubnetID == aws.ToString(ds.SubnetID) {
 				found = true
 				break
 			}
@@ -368,17 +371,17 @@ func (e *external) createAssociations(ctx context.Context, tableID string, desir
 	for _, asc := range desired {
 		isObserved := false
 		for _, ob := range observed {
-			if ob.SubnetID == aws.StringValue(asc.SubnetID) {
+			if ob.SubnetID == aws.ToString(asc.SubnetID) {
 				isObserved = true
 				break
 			}
 		}
 		// if the association is already created, skip it
 		if !isObserved {
-			_, err := e.client.AssociateRouteTableRequest(&awsec2.AssociateRouteTableInput{
+			_, err := e.client.AssociateRouteTable(ctx, &awsec2.AssociateRouteTableInput{
 				RouteTableId: aws.String(tableID),
 				SubnetId:     asc.SubnetID,
-			}).Send(ctx)
+			})
 
 			if err != nil {
 				return err
@@ -402,11 +405,11 @@ func (e *external) reconcileAssociations(ctx context.Context, tableID string, de
 
 func (e *external) deleteAssociations(ctx context.Context, observed []v1beta1.AssociationState) error {
 	for _, asc := range observed {
-		req := e.client.DisassociateRouteTableRequest(&awsec2.DisassociateRouteTableInput{
+		_, err := e.client.DisassociateRouteTable(ctx, &awsec2.DisassociateRouteTableInput{
 			AssociationId: aws.String(asc.AssociationID),
 		})
 
-		if _, err := req.Send(ctx); err != nil {
+		if err != nil {
 			if ec2.IsAssociationIDNotFoundErr(err) {
 				continue
 			}

@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"time"
 
 	svcsdk "github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/aws/aws-sdk-go/service/secretsmanager/secretsmanageriface"
@@ -43,17 +44,22 @@ import (
 )
 
 const (
-	errNotSecret        = "managed resource is not a secret custom resource"
-	errKubeUpdateFailed = "failed to update Secret custom resource"
-	errCreateTags       = "failed to create tags for the secret"
-	errRemoveTags       = "failed to remove tags for the secret"
-	errFmtKeyNotFound   = "key %s is not found in referenced Kubernetes secret"
-	errGetSecretFailed  = "failed to get Kubernetes secret"
-	errGetSecretValue   = "cannot get the value of secret from AWS"
+	errNotSecret            = "managed resource is not a secret custom resource"
+	errKubeUpdateFailed     = "failed to update Secret custom resource"
+	errCreateTags           = "failed to create tags for the secret"
+	errRemoveTags           = "failed to remove tags for the secret"
+	errFmtKeyNotFound       = "key %s is not found in referenced Kubernetes secret"
+	errGetSecretFailed      = "failed to get Kubernetes secret"
+	errGetSecretValue       = "cannot get the value of secret from AWS"
+	errGetResourcePolicy    = "cannot get resource policy"
+	errPutResourcePolicy    = "cannot put resource policy"
+	errDeleteResourcePolicy = "cannot delete resource policy"
+	errInvalidSpecPolicy    = "spec policy is invalid"
+	errInvalidCurrentPolicy = "current policy is invalid"
 )
 
 // SetupSecret adds a controller that reconciles a Secret.
-func SetupSecret(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
+func SetupSecret(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll time.Duration) error {
 	name := managed.ControllerName(svcapitypes.SecretGroupKind)
 	opts := []option{
 		func(e *external) {
@@ -70,7 +76,7 @@ func SetupSecret(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) e
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter: ratelimiter.NewDefaultManagedRateLimiter(rl),
+			RateLimiter: ratelimiter.NewController(rl),
 		}).
 		For(&svcapitypes.Secret{}).
 		Complete(managed.NewReconciler(mgr,
@@ -78,6 +84,7 @@ func SetupSecret(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) e
 			managed.WithExternalConnecter(&connector{kube: mgr.GetClient(), opts: opts}),
 			managed.WithReferenceResolver(managed.NewAPISimpleReferenceResolver(mgr.GetClient())),
 			managed.WithInitializers(managed.NewDefaultProviderConfig(mgr.GetClient()), managed.NewNameAsExternalName(mgr.GetClient()), &tagger{kube: mgr.GetClient()}),
+			managed.WithPollInterval(poll),
 			managed.WithLogger(l.WithValues("controller", name)),
 			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
@@ -106,10 +113,7 @@ type hooks struct {
 	kube   client.Client
 }
 
-func (e *hooks) isUpToDate(check bool, cr *svcapitypes.Secret, resp *svcsdk.DescribeSecretOutput) (bool, error) { // nolint:gocyclo
-	if !check {
-		return check, nil
-	}
+func (e *hooks) isUpToDate(cr *svcapitypes.Secret, resp *svcsdk.DescribeSecretOutput) (bool, error) { // nolint:gocyclo
 	// NOTE(muvaf): No operation can be done on secrets that are marked for deletion.
 	if resp.DeletedDate != nil {
 		return true, nil
@@ -124,8 +128,34 @@ func (e *hooks) isUpToDate(check bool, cr *svcapitypes.Secret, resp *svcsdk.Desc
 	if len(add) != 0 && len(remove) != 0 {
 		return false, nil
 	}
+
 	// TODO(muvaf): We need isUpToDate to have context.
 	ctx := context.TODO()
+
+	// Compare secret resource policies
+	pol, err := e.client.GetResourcePolicyWithContext(ctx, &svcsdk.GetResourcePolicyInput{
+		SecretId: awsclients.String(meta.GetExternalName(cr)),
+	})
+	if err != nil {
+		return false, errors.Wrap(err, errGetResourcePolicy)
+	}
+	if pol.ResourcePolicy != nil && cr.Spec.ForProvider.ResourcePolicy != nil {
+		compactCurrentPolicy, err := awsclients.CompactAndEscapeJSON(awsclients.StringValue(pol.ResourcePolicy))
+		if err != nil {
+			return false, errors.Wrap(err, errInvalidCurrentPolicy)
+		}
+		compactSpecPolicy, err := awsclients.CompactAndEscapeJSON(awsclients.StringValue(cr.Spec.ForProvider.ResourcePolicy))
+		if err != nil {
+			return false, errors.Wrap(err, errInvalidSpecPolicy)
+		}
+		if compactCurrentPolicy != compactSpecPolicy {
+			return false, nil
+		}
+	} else if !(pol.ResourcePolicy == nil && cr.Spec.ForProvider.ResourcePolicy == nil) {
+		return false, nil
+	}
+
+	// Compare secret values
 	s, err := e.client.GetSecretValueWithContext(ctx, &svcsdk.GetSecretValueInput{
 		SecretId: awsclients.String(meta.GetExternalName(cr)),
 	})
@@ -163,6 +193,7 @@ func (e *hooks) getPayload(ctx context.Context, cr *svcapitypes.Secret) ([]byte,
 	if err := e.kube.Get(ctx, nn, sc); err != nil {
 		return nil, errors.Wrap(err, errGetSecretFailed)
 	}
+
 	if ref.Key != nil {
 		val, ok := sc.Data[awsclients.StringValue(ref.Key)]
 		if !ok {
@@ -181,7 +212,7 @@ func (e *hooks) getPayload(ctx context.Context, cr *svcapitypes.Secret) ([]byte,
 	return payload, nil
 }
 
-func (e *hooks) preUpdate(ctx context.Context, cr *svcapitypes.Secret, obj *svcsdk.UpdateSecretInput) error {
+func (e *hooks) preUpdate(ctx context.Context, cr *svcapitypes.Secret, obj *svcsdk.UpdateSecretInput) error { // nolint:gocyclo
 	resp, err := e.client.DescribeSecretWithContext(ctx, &svcsdk.DescribeSecretInput{
 		SecretId: awsclients.String(meta.GetExternalName(cr)),
 	})
@@ -205,6 +236,25 @@ func (e *hooks) preUpdate(ctx context.Context, cr *svcapitypes.Secret, obj *svcs
 			return awsclients.Wrap(err, errCreateTags)
 		}
 	}
+
+	// Update resource policy
+	if cr.Spec.ForProvider.ResourcePolicy != nil {
+		_, err := e.client.PutResourcePolicyWithContext(ctx, &svcsdk.PutResourcePolicyInput{
+			SecretId:       awsclients.String(meta.GetExternalName(cr)),
+			ResourcePolicy: cr.Spec.ForProvider.ResourcePolicy,
+		})
+		if err != nil {
+			return errors.Wrap(err, errPutResourcePolicy)
+		}
+	} else {
+		_, err := e.client.DeleteResourcePolicyWithContext(ctx, &svcsdk.DeleteResourcePolicyInput{
+			SecretId: awsclients.String(meta.GetExternalName(cr)),
+		})
+		if err != nil {
+			return errors.Wrap(err, errDeleteResourcePolicy)
+		}
+	}
+
 	payload, err := e.getPayload(ctx, cr)
 	if err != nil {
 		return err

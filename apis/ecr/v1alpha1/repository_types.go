@@ -44,6 +44,10 @@ type RepositoryParameters struct {
 	// Metadata tagging key value pairs
 	// +optional
 	Tags []Tag `json:"tags,omitempty"`
+
+	// If a repository contains images, forces the deletion.
+	// +optional
+	ForceDelete *bool `json:"forceDelete,omitempty"`
 }
 
 // Tag defines a tag
@@ -59,7 +63,8 @@ type Tag struct {
 // A RepositorySpec defines the desired state of a Elastic Container Repository.
 type RepositorySpec struct {
 	xpv1.ResourceSpec `json:",inline"`
-	ForProvider       RepositoryParameters `json:"forProvider"`
+
+	ForProvider RepositoryParameters `json:"forProvider"`
 }
 
 // RepositoryObservation keeps the state for the external resource
@@ -98,7 +103,7 @@ type ImageScanningConfiguration struct {
 // A RepositoryStatus represents the observed state of a Elastic Container Repository.
 type RepositoryStatus struct {
 	xpv1.ResourceStatus `json:",inline"`
-	AtProvider          RepositoryObservation `json:"atProvider"`
+	AtProvider          RepositoryObservation `json:"atProvider,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -110,6 +115,8 @@ type RepositoryStatus struct {
 // +kubebuilder:printcolumn:name="URI",type="string",JSONPath=".status.atProvider.repositoryUri"
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,categories={crossplane,managed,aws}
+// +kubebuilder:deprecatedversion:warning="Please use v1beta1 version of this resource that has identical schema."
+// Deprecated: Please use v1beta1 version of this resource.
 type Repository struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -121,6 +128,8 @@ type Repository struct {
 // +kubebuilder:object:root=true
 
 // RepositoryList contains a list of ECRs
+// +kubebuilder:deprecatedversion:warning="Please use v1beta1 version of this resource that has identical schema."
+// Deprecated: Please use v1beta1 version of this resource.
 type RepositoryList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

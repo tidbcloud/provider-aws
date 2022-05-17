@@ -2,6 +2,7 @@ package dbcluster
 
 import (
 	"context"
+	"time"
 
 	svcsdk "github.com/aws/aws-sdk-go/service/rds"
 	svcsdkapi "github.com/aws/aws-sdk-go/service/rds/rdsiface"
@@ -25,13 +26,15 @@ import (
 )
 
 // SetupDBCluster adds a controller that reconciles DbCluster.
-func SetupDBCluster(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
+func SetupDBCluster(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll time.Duration) error {
 	name := managed.ControllerName(svcapitypes.DBClusterGroupKind)
 	opts := []option{
 		func(e *external) {
 			e.preObserve = preObserve
 			e.postObserve = postObserve
 			c := &custom{client: e.client, kube: e.kube}
+			e.isUpToDate = isUpToDate
+			e.preUpdate = preUpdate
 			e.preCreate = c.preCreate
 			e.postCreate = c.postCreate
 			e.preDelete = preDelete
@@ -41,12 +44,13 @@ func SetupDBCluster(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter: ratelimiter.NewDefaultManagedRateLimiter(rl),
+			RateLimiter: ratelimiter.NewController(rl),
 		}).
 		For(&svcapitypes.DBCluster{}).
 		Complete(managed.NewReconciler(mgr,
 			resource.ManagedKind(svcapitypes.DBClusterGroupVersionKind),
 			managed.WithExternalConnecter(&connector{kube: mgr.GetClient(), opts: opts}),
+			managed.WithPollInterval(poll),
 			managed.WithLogger(l.WithValues("controller", name)),
 			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
@@ -65,7 +69,7 @@ func postObserve(_ context.Context, cr *svcapitypes.DBCluster, resp *svcsdk.Desc
 		return managed.ExternalObservation{}, err
 	}
 	switch aws.StringValue(resp.DBClusters[0].Status) {
-	case "available":
+	case "available", "modifying":
 		cr.SetConditions(xpv1.Available())
 	case "deleting", "stopped", "stopping":
 		cr.SetConditions(xpv1.Unavailable())
@@ -99,7 +103,8 @@ func (e *custom) postCreate(ctx context.Context, cr *svcapitypes.DBCluster, _ *s
 		return managed.ExternalCreation{}, err
 	}
 	conn := managed.ConnectionDetails{
-		xpv1.ResourceCredentialsSecretUserKey: []byte(aws.StringValue(cr.Spec.ForProvider.MasterUsername)),
+		xpv1.ResourceCredentialsSecretEndpointKey: []byte(aws.StringValue(cr.Status.AtProvider.Endpoint)),
+		xpv1.ResourceCredentialsSecretUserKey:     []byte(aws.StringValue(cr.Spec.ForProvider.MasterUsername)),
 	}
 	pw, _, err := rds.GetPassword(ctx, e.kube, &cr.Spec.ForProvider.MasterUserPasswordSecretRef, cr.Spec.WriteConnectionSecretToReference)
 	if err != nil {
@@ -111,6 +116,26 @@ func (e *custom) postCreate(ctx context.Context, cr *svcapitypes.DBCluster, _ *s
 	return managed.ExternalCreation{
 		ConnectionDetails: conn,
 	}, nil
+}
+
+func isUpToDate(cr *svcapitypes.DBCluster, out *svcsdk.DescribeDBClustersOutput) (bool, error) {
+	status := aws.StringValue(out.DBClusters[0].Status)
+	if status == "modifying" || status == "upgrading" || status == "configuring-iam-database-auth" {
+		return true, nil
+	}
+
+	if aws.BoolValue(cr.Spec.ForProvider.EnableIAMDatabaseAuthentication) != aws.BoolValue(out.DBClusters[0].IAMDatabaseAuthenticationEnabled) {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func preUpdate(_ context.Context, cr *svcapitypes.DBCluster, obj *svcsdk.ModifyDBClusterInput) error {
+	obj.DBClusterIdentifier = aws.String(meta.GetExternalName(cr))
+	obj.ApplyImmediately = cr.Spec.ForProvider.ApplyImmediately
+
+	return nil
 }
 
 func preDelete(_ context.Context, cr *svcapitypes.DBCluster, obj *svcsdk.DeleteDBClusterInput) (bool, error) {

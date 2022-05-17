@@ -18,9 +18,11 @@ package securitygroup
 
 import (
 	"context"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
+	awsec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -53,29 +55,31 @@ const (
 	errAuthorizeEgress  = "failed to authorize egress rules"
 	errDelete           = "failed to delete the SecurityGroup resource"
 	errSpecUpdate       = "cannot update spec of the SecurityGroup custom resource"
-	errRevokeEgress     = "cannot remove the default egress rule"
+	errRevokeEgress     = "failed to revoke egress rules"
+	errRevokeIngress    = "failed to revoke ingress rules"
 	errStatusUpdate     = "cannot update status of the SecurityGroup custom resource"
-	errUpdate           = "failed to update the SecurityGroup resource"
 	errCreateTags       = "failed to create tags for the Security Group resource"
 	errDeleteTags       = "failed to delete tags for the Security Group resource"
 )
 
 // SetupSecurityGroup adds a controller that reconciles SecurityGroups.
-func SetupSecurityGroup(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
+func SetupSecurityGroup(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll time.Duration) error {
 	name := managed.ControllerName(v1beta1.SecurityGroupGroupKind)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter: ratelimiter.NewDefaultManagedRateLimiter(rl),
+			RateLimiter: ratelimiter.NewController(rl),
 		}).
 		For(&v1beta1.SecurityGroup{}).
 		Complete(managed.NewReconciler(mgr,
 			resource.ManagedKind(v1beta1.SecurityGroupGroupVersionKind),
 			managed.WithExternalConnecter(&connector{kube: mgr.GetClient(), newClientFn: ec2.NewSecurityGroupClient}),
+			managed.WithCreationGracePeriod(3*time.Minute),
 			managed.WithReferenceResolver(managed.NewAPISimpleReferenceResolver(mgr.GetClient())),
-			managed.WithInitializers(managed.NewDefaultProviderConfig(mgr.GetClient())),
+			managed.WithInitializers(),
 			managed.WithConnectionPublishers(),
+			managed.WithPollInterval(poll),
 			managed.WithLogger(l.WithValues("controller", name)),
 			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
@@ -90,7 +94,7 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	if !ok {
 		return nil, errors.New(errUnexpectedObject)
 	}
-	cfg, err := awsclient.GetConfig(ctx, c.kube, mg, aws.StringValue(cr.Spec.ForProvider.Region))
+	cfg, err := awsclient.GetConfig(ctx, c.kube, mg, aws.ToString(cr.Spec.ForProvider.Region))
 	if err != nil {
 		return nil, err
 	}
@@ -112,9 +116,9 @@ func (e *external) Observe(ctx context.Context, mgd resource.Managed) (managed.E
 		return managed.ExternalObservation{}, nil
 	}
 
-	response, err := e.sg.DescribeSecurityGroupsRequest(&awsec2.DescribeSecurityGroupsInput{
+	response, err := e.sg.DescribeSecurityGroups(ctx, &awsec2.DescribeSecurityGroupsInput{
 		GroupIds: []string{meta.GetExternalName(cr)},
-	}).Send(ctx)
+	})
 	if err != nil {
 		return managed.ExternalObservation{}, awsclient.Wrap(resource.Ignore(ec2.IsSecurityGroupNotFoundErr, err), errDescribe)
 	}
@@ -131,11 +135,7 @@ func (e *external) Observe(ctx context.Context, mgd resource.Managed) (managed.E
 
 	cr.Status.AtProvider = ec2.GenerateSGObservation(observed)
 
-	upToDate, err := ec2.IsSGUpToDate(cr.Spec.ForProvider, observed)
-	if err != nil {
-		return managed.ExternalObservation{}, awsclient.Wrap(err, errDescribe)
-	}
-
+	upToDate := ec2.IsSGUpToDate(cr.Spec.ForProvider, observed)
 	// this is to make sure that the security group exists with the specified traffic rules.
 	if upToDate {
 		cr.SetConditions(xpv1.Available())
@@ -160,15 +160,15 @@ func (e *external) Create(ctx context.Context, mgd resource.Managed) (managed.Ex
 	}
 
 	// Creating the SecurityGroup itself
-	result, err := e.sg.CreateSecurityGroupRequest(&awsec2.CreateSecurityGroupInput{
+	result, err := e.sg.CreateSecurityGroup(ctx, &awsec2.CreateSecurityGroupInput{
 		GroupName:   aws.String(cr.Spec.ForProvider.GroupName),
 		VpcId:       cr.Spec.ForProvider.VPCID,
 		Description: aws.String(cr.Spec.ForProvider.Description),
-	}).Send(ctx)
+	})
 	if err != nil {
 		return managed.ExternalCreation{}, awsclient.Wrap(err, errCreate)
 	}
-	en := aws.StringValue(result.GroupId)
+	en := aws.ToString(result.GroupId)
 	// NOTE(muvaf): We have this code block in managed reconciler but this resource
 	// has an exception where it needs to make another API call right after the
 	// Create and we cannot afford losing the identifier in case RevokeSecurityGroupEgressRequest
@@ -186,15 +186,15 @@ func (e *external) Create(ctx context.Context, mgd resource.Managed) (managed.Ex
 	}
 	// NOTE(muvaf): AWS creates an initial egress rule and there is no way to
 	// disable it with the create call. So, we revoke it right after the creation.
-	_, err = e.sg.RevokeSecurityGroupEgressRequest(&awsec2.RevokeSecurityGroupEgressInput{
+	_, err = e.sg.RevokeSecurityGroupEgress(ctx, &awsec2.RevokeSecurityGroupEgressInput{
 		GroupId: aws.String(meta.GetExternalName(cr)),
-		IpPermissions: []awsec2.IpPermission{
+		IpPermissions: []awsec2types.IpPermission{
 			{
 				IpProtocol: aws.String("-1"),
-				IpRanges:   []awsec2.IpRange{{CidrIp: aws.String("0.0.0.0/0")}},
+				IpRanges:   []awsec2types.IpRange{{CidrIp: aws.String("0.0.0.0/0")}},
 			},
 		},
-	}).Send(ctx)
+	})
 	return managed.ExternalCreation{}, awsclient.Wrap(err, errRevokeEgress)
 }
 
@@ -204,52 +204,70 @@ func (e *external) Update(ctx context.Context, mgd resource.Managed) (managed.Ex
 		return managed.ExternalUpdate{}, errors.New(errUnexpectedObject)
 	}
 
-	response, err := e.sg.DescribeSecurityGroupsRequest(&awsec2.DescribeSecurityGroupsInput{
+	response, err := e.sg.DescribeSecurityGroups(ctx, &awsec2.DescribeSecurityGroupsInput{
 		GroupIds: []string{meta.GetExternalName(cr)},
-	}).Send(ctx)
+	})
 	if err != nil {
 		return managed.ExternalUpdate{}, awsclient.Wrap(resource.Ignore(ec2.IsSecurityGroupNotFoundErr, err), errDescribe)
 	}
 
-	patch, err := ec2.CreateSGPatch(response.SecurityGroups[0], cr.Spec.ForProvider)
-	if err != nil {
-		return managed.ExternalUpdate{}, errors.New(errUpdate)
-	}
-
 	add, remove := awsclient.DiffEC2Tags(v1beta1.GenerateEC2Tags(cr.Spec.ForProvider.Tags), response.SecurityGroups[0].Tags)
 	if len(remove) > 0 {
-		if _, err := e.sg.DeleteTagsRequest(&awsec2.DeleteTagsInput{
+		if _, err := e.sg.DeleteTags(ctx, &awsec2.DeleteTagsInput{
 			Resources: []string{meta.GetExternalName(cr)},
 			Tags:      remove,
-		}).Send(ctx); err != nil {
+		}); err != nil {
 			return managed.ExternalUpdate{}, awsclient.Wrap(err, errDeleteTags)
 		}
 	}
 
 	if len(add) > 0 {
-		if _, err := e.sg.CreateTagsRequest(&awsec2.CreateTagsInput{
+		if _, err := e.sg.CreateTags(ctx, &awsec2.CreateTagsInput{
 			Resources: []string{meta.GetExternalName(cr)},
 			Tags:      add,
-		}).Send(ctx); err != nil {
+		}); err != nil {
 			return managed.ExternalUpdate{}, awsclient.Wrap(err, errCreateTags)
 		}
 	}
 
-	if patch.Ingress != nil {
-		if _, err := e.sg.AuthorizeSecurityGroupIngressRequest(&awsec2.AuthorizeSecurityGroupIngressInput{
-			GroupId:       aws.String(meta.GetExternalName(cr)),
-			IpPermissions: ec2.GenerateEC2Permissions(cr.Spec.ForProvider.Ingress),
-		}).Send(ctx); err != nil && !ec2.IsRuleAlreadyExistsErr(err) {
-			return managed.ExternalUpdate{}, awsclient.Wrap(err, errAuthorizeIngress)
+	{
+		add, remove := ec2.DiffPermissions(ec2.GenerateEC2Permissions(cr.Spec.ForProvider.Ingress), response.SecurityGroups[0].IpPermissions)
+		if len(remove) > 0 {
+			if _, err := e.sg.RevokeSecurityGroupIngress(ctx, &awsec2.RevokeSecurityGroupIngressInput{
+				GroupId:       aws.String(meta.GetExternalName(cr)),
+				IpPermissions: remove,
+			}); err != nil {
+				return managed.ExternalUpdate{}, awsclient.Wrap(err, errRevokeIngress)
+			}
+		}
+		if len(add) > 0 {
+			if _, err := e.sg.AuthorizeSecurityGroupIngress(ctx, &awsec2.AuthorizeSecurityGroupIngressInput{
+				GroupId:       aws.String(meta.GetExternalName(cr)),
+				IpPermissions: add,
+			}); err != nil && !ec2.IsRuleAlreadyExistsErr(err) {
+				return managed.ExternalUpdate{}, awsclient.Wrap(err, errAuthorizeIngress)
+			}
 		}
 	}
 
-	if patch.Egress != nil {
-		if _, err = e.sg.AuthorizeSecurityGroupEgressRequest(&awsec2.AuthorizeSecurityGroupEgressInput{
-			GroupId:       aws.String(meta.GetExternalName(cr)),
-			IpPermissions: ec2.GenerateEC2Permissions(cr.Spec.ForProvider.Egress),
-		}).Send(ctx); err != nil && !ec2.IsRuleAlreadyExistsErr(err) {
-			return managed.ExternalUpdate{}, awsclient.Wrap(err, errAuthorizeEgress)
+	{
+		add, remove := ec2.DiffPermissions(ec2.GenerateEC2Permissions(cr.Spec.ForProvider.Egress), response.SecurityGroups[0].IpPermissionsEgress)
+		if len(remove) > 0 {
+			if _, err = e.sg.RevokeSecurityGroupEgress(ctx, &awsec2.RevokeSecurityGroupEgressInput{
+				GroupId:       aws.String(meta.GetExternalName(cr)),
+				IpPermissions: remove,
+			}); err != nil {
+				return managed.ExternalUpdate{}, awsclient.Wrap(err, errRevokeEgress)
+			}
+		}
+
+		if len(add) > 0 {
+			if _, err = e.sg.AuthorizeSecurityGroupEgress(ctx, &awsec2.AuthorizeSecurityGroupEgressInput{
+				GroupId:       aws.String(meta.GetExternalName(cr)),
+				IpPermissions: add,
+			}); err != nil && !ec2.IsRuleAlreadyExistsErr(err) {
+				return managed.ExternalUpdate{}, awsclient.Wrap(err, errAuthorizeEgress)
+			}
 		}
 	}
 
@@ -264,9 +282,9 @@ func (e *external) Delete(ctx context.Context, mgd resource.Managed) error {
 
 	cr.Status.SetConditions(xpv1.Deleting())
 
-	_, err := e.sg.DeleteSecurityGroupRequest(&awsec2.DeleteSecurityGroupInput{
+	_, err := e.sg.DeleteSecurityGroup(ctx, &awsec2.DeleteSecurityGroupInput{
 		GroupId: aws.String(meta.GetExternalName(cr)),
-	}).Send(ctx)
+	})
 
 	return awsclient.Wrap(resource.Ignore(ec2.IsSecurityGroupNotFoundErr, err), errDelete)
 }

@@ -126,6 +126,15 @@ type UserIDGroupPair struct {
 	// +optional
 	GroupID *string `json:"groupId,omitempty"`
 
+	// GroupIDRef reference a security group to retrieve its GroupID
+	// +optional
+	// +immutable
+	GroupIDRef *xpv1.Reference `json:"groupIdRef,omitempty"`
+
+	// GroupIDSelector selects reference to a security group to retrieve its GroupID
+	// +optional
+	GroupIDSelector *xpv1.Selector `json:"groupIdSelector,omitempty"`
+
 	// The name of the security group. In a request, use this parameter for a security
 	// group in EC2-Classic or a default VPC only. For a security group in a nondefault
 	// VPC, use the security group ID.
@@ -164,13 +173,21 @@ type UserIDGroupPair struct {
 	VPCPeeringConnectionID *string `json:"vpcPeeringConnectionId,omitempty"`
 }
 
+// ClearRefSelectors nils out ref and selectors
+func (u *UserIDGroupPair) ClearRefSelectors() {
+	u.VPCIDRef = nil
+	u.VPCIDSelector = nil
+	u.GroupIDRef = nil
+	u.GroupIDSelector = nil
+}
+
 // IPPermission Describes a set of permissions for a security group rule.
 type IPPermission struct {
 	// The start of port range for the TCP and UDP protocols, or an ICMP/ICMPv6
 	// type number. A value of -1 indicates all ICMP/ICMPv6 types. If you specify
 	// all ICMP/ICMPv6 types, you must specify all codes.
 	// +optional
-	FromPort *int64 `json:"fromPort,omitempty"`
+	FromPort *int32 `json:"fromPort,omitempty"`
 
 	// The IP protocol name (tcp, udp, icmp, icmpv6) or number (see Protocol Numbers
 	// (http://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml)).
@@ -205,7 +222,7 @@ type IPPermission struct {
 	// A value of -1 indicates all ICMP/ICMPv6 codes. If you specify all ICMP/ICMPv6
 	// types, you must specify all codes.
 	// +optional
-	ToPort *int64 `json:"toPort,omitempty"`
+	ToPort *int32 `json:"toPort,omitempty"`
 
 	// UserIDGroupPairs are the source security group and AWS account ID pairs.
 	// It contains one or more accounts and security groups to allow flows from
@@ -232,7 +249,7 @@ type SecurityGroupObservation struct {
 // A SecurityGroupStatus represents the observed state of a SecurityGroup.
 type SecurityGroupStatus struct {
 	xpv1.ResourceStatus `json:",inline"`
-	AtProvider          SecurityGroupObservation `json:"atProvider"`
+	AtProvider          SecurityGroupObservation `json:"atProvider,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -246,6 +263,7 @@ type SecurityGroupStatus struct {
 // +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,categories={crossplane,managed,aws}
+// +kubebuilder:storageversion
 type SecurityGroup struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

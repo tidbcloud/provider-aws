@@ -2,6 +2,7 @@ package dbparametergroup
 
 import (
 	"context"
+	"time"
 
 	svcsdk "github.com/aws/aws-sdk-go/service/rds"
 	svcsdkapi "github.com/aws/aws-sdk-go/service/rds/rdsiface"
@@ -24,7 +25,7 @@ import (
 )
 
 // SetupDBParameterGroup adds a controller that reconciles DBParametergroup.
-func SetupDBParameterGroup(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
+func SetupDBParameterGroup(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll time.Duration) error {
 	name := managed.ControllerName(svcapitypes.DBParameterGroupGroupKind)
 	opts := []option{
 		func(e *external) {
@@ -40,12 +41,13 @@ func SetupDBParameterGroup(mgr ctrl.Manager, l logging.Logger, rl workqueue.Rate
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter: ratelimiter.NewDefaultManagedRateLimiter(rl),
+			RateLimiter: ratelimiter.NewController(rl),
 		}).
 		For(&svcapitypes.DBParameterGroup{}).
 		Complete(managed.NewReconciler(mgr,
 			resource.ManagedKind(svcapitypes.DBParameterGroupGroupVersionKind),
 			managed.WithExternalConnecter(&connector{kube: mgr.GetClient(), opts: opts}),
+			managed.WithPollInterval(poll),
 			managed.WithLogger(l.WithValues("controller", name)),
 			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
@@ -134,7 +136,7 @@ func (e *custom) isUpToDate(cr *svcapitypes.DBParameterGroup, obj *svcsdk.Descri
 func (e *custom) getCurrentDBParameters(ctx context.Context, cr *svcapitypes.DBParameterGroup) ([]*svcsdk.Parameter, error) {
 	input := &svcsdk.DescribeDBParametersInput{
 		DBParameterGroupName: awsclients.String(meta.GetExternalName(cr)),
-		MaxRecords:           awsclients.Int64(20),
+		MaxRecords:           awsclients.Int64(100),
 	}
 	var results []*svcsdk.Parameter
 	err := e.client.DescribeDBParametersPagesWithContext(ctx, input, func(page *svcsdk.DescribeDBParametersOutput, lastPage bool) bool {

@@ -117,15 +117,91 @@ func (e *external) Create(ctx context.Context, mg cpresource.Managed) (managed.E
 
 	if resp.ApiEndpoint != nil {
 		cr.Status.AtProvider.APIEndpoint = resp.ApiEndpoint
+	} else {
+		cr.Status.AtProvider.APIEndpoint = nil
 	}
 	if resp.ApiGatewayManaged != nil {
 		cr.Status.AtProvider.APIGatewayManaged = resp.ApiGatewayManaged
+	} else {
+		cr.Status.AtProvider.APIGatewayManaged = nil
 	}
 	if resp.ApiId != nil {
 		cr.Status.AtProvider.APIID = resp.ApiId
+	} else {
+		cr.Status.AtProvider.APIID = nil
+	}
+	if resp.ApiKeySelectionExpression != nil {
+		cr.Spec.ForProvider.APIKeySelectionExpression = resp.ApiKeySelectionExpression
+	} else {
+		cr.Spec.ForProvider.APIKeySelectionExpression = nil
+	}
+	if resp.CorsConfiguration != nil {
+		f4 := &svcapitypes.CORS{}
+		if resp.CorsConfiguration.AllowCredentials != nil {
+			f4.AllowCredentials = resp.CorsConfiguration.AllowCredentials
+		}
+		if resp.CorsConfiguration.AllowHeaders != nil {
+			f4f1 := []*string{}
+			for _, f4f1iter := range resp.CorsConfiguration.AllowHeaders {
+				var f4f1elem string
+				f4f1elem = *f4f1iter
+				f4f1 = append(f4f1, &f4f1elem)
+			}
+			f4.AllowHeaders = f4f1
+		}
+		if resp.CorsConfiguration.AllowMethods != nil {
+			f4f2 := []*string{}
+			for _, f4f2iter := range resp.CorsConfiguration.AllowMethods {
+				var f4f2elem string
+				f4f2elem = *f4f2iter
+				f4f2 = append(f4f2, &f4f2elem)
+			}
+			f4.AllowMethods = f4f2
+		}
+		if resp.CorsConfiguration.AllowOrigins != nil {
+			f4f3 := []*string{}
+			for _, f4f3iter := range resp.CorsConfiguration.AllowOrigins {
+				var f4f3elem string
+				f4f3elem = *f4f3iter
+				f4f3 = append(f4f3, &f4f3elem)
+			}
+			f4.AllowOrigins = f4f3
+		}
+		if resp.CorsConfiguration.ExposeHeaders != nil {
+			f4f4 := []*string{}
+			for _, f4f4iter := range resp.CorsConfiguration.ExposeHeaders {
+				var f4f4elem string
+				f4f4elem = *f4f4iter
+				f4f4 = append(f4f4, &f4f4elem)
+			}
+			f4.ExposeHeaders = f4f4
+		}
+		if resp.CorsConfiguration.MaxAge != nil {
+			f4.MaxAge = resp.CorsConfiguration.MaxAge
+		}
+		cr.Spec.ForProvider.CORSConfiguration = f4
+	} else {
+		cr.Spec.ForProvider.CORSConfiguration = nil
 	}
 	if resp.CreatedDate != nil {
 		cr.Status.AtProvider.CreatedDate = &metav1.Time{*resp.CreatedDate}
+	} else {
+		cr.Status.AtProvider.CreatedDate = nil
+	}
+	if resp.Description != nil {
+		cr.Spec.ForProvider.Description = resp.Description
+	} else {
+		cr.Spec.ForProvider.Description = nil
+	}
+	if resp.DisableExecuteApiEndpoint != nil {
+		cr.Spec.ForProvider.DisableExecuteAPIEndpoint = resp.DisableExecuteApiEndpoint
+	} else {
+		cr.Spec.ForProvider.DisableExecuteAPIEndpoint = nil
+	}
+	if resp.DisableSchemaValidation != nil {
+		cr.Spec.ForProvider.DisableSchemaValidation = resp.DisableSchemaValidation
+	} else {
+		cr.Spec.ForProvider.DisableSchemaValidation = nil
 	}
 	if resp.ImportInfo != nil {
 		f9 := []*string{}
@@ -135,6 +211,39 @@ func (e *external) Create(ctx context.Context, mg cpresource.Managed) (managed.E
 			f9 = append(f9, &f9elem)
 		}
 		cr.Status.AtProvider.ImportInfo = f9
+	} else {
+		cr.Status.AtProvider.ImportInfo = nil
+	}
+	if resp.Name != nil {
+		cr.Spec.ForProvider.Name = resp.Name
+	} else {
+		cr.Spec.ForProvider.Name = nil
+	}
+	if resp.ProtocolType != nil {
+		cr.Spec.ForProvider.ProtocolType = resp.ProtocolType
+	} else {
+		cr.Spec.ForProvider.ProtocolType = nil
+	}
+	if resp.RouteSelectionExpression != nil {
+		cr.Spec.ForProvider.RouteSelectionExpression = resp.RouteSelectionExpression
+	} else {
+		cr.Spec.ForProvider.RouteSelectionExpression = nil
+	}
+	if resp.Tags != nil {
+		f13 := map[string]*string{}
+		for f13key, f13valiter := range resp.Tags {
+			var f13val string
+			f13val = *f13valiter
+			f13[f13key] = &f13val
+		}
+		cr.Spec.ForProvider.Tags = f13
+	} else {
+		cr.Spec.ForProvider.Tags = nil
+	}
+	if resp.Version != nil {
+		cr.Spec.ForProvider.Version = resp.Version
+	} else {
+		cr.Spec.ForProvider.Version = nil
 	}
 	if resp.Warnings != nil {
 		f15 := []*string{}
@@ -144,6 +253,8 @@ func (e *external) Create(ctx context.Context, mg cpresource.Managed) (managed.E
 			f15 = append(f15, &f15elem)
 		}
 		cr.Status.AtProvider.Warnings = f15
+	} else {
+		cr.Status.AtProvider.Warnings = nil
 	}
 
 	return e.postCreate(ctx, cr, resp, managed.ExternalCreation{}, err)
@@ -159,10 +270,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 		return managed.ExternalUpdate{}, errors.Wrap(err, "pre-update failed")
 	}
 	resp, err := e.client.UpdateApiWithContext(ctx, input)
-	if err != nil {
-		return managed.ExternalUpdate{}, awsclient.Wrap(err, errUpdate)
-	}
-	return e.postUpdate(ctx, cr, resp, managed.ExternalUpdate{}, err)
+	return e.postUpdate(ctx, cr, resp, managed.ExternalUpdate{}, awsclient.Wrap(err, errUpdate))
 }
 
 func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error {
@@ -172,11 +280,15 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error {
 	}
 	cr.Status.SetConditions(xpv1.Deleting())
 	input := GenerateDeleteApiInput(cr)
-	if err := e.preDelete(ctx, cr, input); err != nil {
+	ignore, err := e.preDelete(ctx, cr, input)
+	if err != nil {
 		return errors.Wrap(err, "pre-delete failed")
 	}
-	_, err := e.client.DeleteApiWithContext(ctx, input)
-	return awsclient.Wrap(cpresource.Ignore(IsNotFound, err), errDelete)
+	if ignore {
+		return nil
+	}
+	resp, err := e.client.DeleteApiWithContext(ctx, input)
+	return e.postDelete(ctx, cr, resp, awsclient.Wrap(cpresource.Ignore(IsNotFound, err), errDelete))
 }
 
 type option func(*external)
@@ -192,6 +304,7 @@ func newExternal(kube client.Client, client svcsdkapi.ApiGatewayV2API, opts []op
 		preCreate:      nopPreCreate,
 		postCreate:     nopPostCreate,
 		preDelete:      nopPreDelete,
+		postDelete:     nopPostDelete,
 		preUpdate:      nopPreUpdate,
 		postUpdate:     nopPostUpdate,
 	}
@@ -210,7 +323,8 @@ type external struct {
 	isUpToDate     func(*svcapitypes.API, *svcsdk.GetApiOutput) (bool, error)
 	preCreate      func(context.Context, *svcapitypes.API, *svcsdk.CreateApiInput) error
 	postCreate     func(context.Context, *svcapitypes.API, *svcsdk.CreateApiOutput, managed.ExternalCreation, error) (managed.ExternalCreation, error)
-	preDelete      func(context.Context, *svcapitypes.API, *svcsdk.DeleteApiInput) error
+	preDelete      func(context.Context, *svcapitypes.API, *svcsdk.DeleteApiInput) (bool, error)
+	postDelete     func(context.Context, *svcapitypes.API, *svcsdk.DeleteApiOutput, error) error
 	preUpdate      func(context.Context, *svcapitypes.API, *svcsdk.UpdateApiInput) error
 	postUpdate     func(context.Context, *svcapitypes.API, *svcsdk.UpdateApiOutput, managed.ExternalUpdate, error) (managed.ExternalUpdate, error)
 }
@@ -218,8 +332,9 @@ type external struct {
 func nopPreObserve(context.Context, *svcapitypes.API, *svcsdk.GetApiInput) error {
 	return nil
 }
-func nopPostObserve(context.Context, *svcapitypes.API, *svcsdk.GetApiOutput, managed.ExternalObservation, error) (managed.ExternalObservation, error) {
-	return managed.ExternalObservation{}, nil
+
+func nopPostObserve(_ context.Context, _ *svcapitypes.API, _ *svcsdk.GetApiOutput, obs managed.ExternalObservation, err error) (managed.ExternalObservation, error) {
+	return obs, err
 }
 func nopLateInitialize(*svcapitypes.APIParameters, *svcsdk.GetApiOutput) error {
 	return nil
@@ -231,15 +346,18 @@ func alwaysUpToDate(*svcapitypes.API, *svcsdk.GetApiOutput) (bool, error) {
 func nopPreCreate(context.Context, *svcapitypes.API, *svcsdk.CreateApiInput) error {
 	return nil
 }
-func nopPostCreate(context.Context, *svcapitypes.API, *svcsdk.CreateApiOutput, managed.ExternalCreation, error) (managed.ExternalCreation, error) {
-	return managed.ExternalCreation{}, nil
+func nopPostCreate(_ context.Context, _ *svcapitypes.API, _ *svcsdk.CreateApiOutput, cre managed.ExternalCreation, err error) (managed.ExternalCreation, error) {
+	return cre, err
 }
-func nopPreDelete(context.Context, *svcapitypes.API, *svcsdk.DeleteApiInput) error {
-	return nil
+func nopPreDelete(context.Context, *svcapitypes.API, *svcsdk.DeleteApiInput) (bool, error) {
+	return false, nil
+}
+func nopPostDelete(_ context.Context, _ *svcapitypes.API, _ *svcsdk.DeleteApiOutput, err error) error {
+	return err
 }
 func nopPreUpdate(context.Context, *svcapitypes.API, *svcsdk.UpdateApiInput) error {
 	return nil
 }
-func nopPostUpdate(context.Context, *svcapitypes.API, *svcsdk.UpdateApiOutput, managed.ExternalUpdate, error) (managed.ExternalUpdate, error) {
-	return managed.ExternalUpdate{}, nil
+func nopPostUpdate(_ context.Context, _ *svcapitypes.API, _ *svcsdk.UpdateApiOutput, upd managed.ExternalUpdate, err error) (managed.ExternalUpdate, error) {
+	return upd, err
 }

@@ -18,6 +18,7 @@ package integrationresponse
 
 import (
 	"context"
+	"time"
 
 	svcsdk "github.com/aws/aws-sdk-go/service/apigatewayv2"
 	"k8s.io/client-go/util/workqueue"
@@ -37,7 +38,7 @@ import (
 )
 
 // SetupIntegrationResponse adds a controller that reconciles IntegrationResponse.
-func SetupIntegrationResponse(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
+func SetupIntegrationResponse(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll time.Duration) error {
 	name := managed.ControllerName(svcapitypes.IntegrationResponseGroupKind)
 	opts := []option{
 		func(e *external) {
@@ -51,13 +52,14 @@ func SetupIntegrationResponse(mgr ctrl.Manager, l logging.Logger, rl workqueue.R
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter: ratelimiter.NewDefaultManagedRateLimiter(rl),
+			RateLimiter: ratelimiter.NewController(rl),
 		}).
 		For(&svcapitypes.IntegrationResponse{}).
 		Complete(managed.NewReconciler(mgr,
 			resource.ManagedKind(svcapitypes.IntegrationResponseGroupVersionKind),
 			managed.WithExternalConnecter(&connector{kube: mgr.GetClient(), opts: opts}),
-			managed.WithInitializers(managed.NewDefaultProviderConfig(mgr.GetClient())),
+			managed.WithInitializers(),
+			managed.WithPollInterval(poll),
 			managed.WithLogger(l.WithValues("controller", name)),
 			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
@@ -86,13 +88,12 @@ func postCreate(_ context.Context, cr *svcapitypes.IntegrationResponse, resp *sv
 		return managed.ExternalCreation{}, err
 	}
 	meta.SetExternalName(cr, aws.StringValue(resp.IntegrationResponseId))
-	cre.ExternalNameAssigned = true
 	return cre, nil
 }
 
-func preDelete(_ context.Context, cr *svcapitypes.IntegrationResponse, obj *svcsdk.DeleteIntegrationResponseInput) error {
+func preDelete(_ context.Context, cr *svcapitypes.IntegrationResponse, obj *svcsdk.DeleteIntegrationResponseInput) (bool, error) {
 	obj.ApiId = cr.Spec.ForProvider.APIID
 	obj.IntegrationId = cr.Spec.ForProvider.IntegrationID
 	obj.IntegrationResponseId = aws.String(meta.GetExternalName(cr))
-	return nil
+	return false, nil
 }

@@ -47,9 +47,18 @@ func GenerateActivity(resp *svcsdk.DescribeActivityOutput) *svcapitypes.Activity
 
 	if resp.ActivityArn != nil {
 		cr.Status.AtProvider.ActivityARN = resp.ActivityArn
+	} else {
+		cr.Status.AtProvider.ActivityARN = nil
 	}
 	if resp.CreationDate != nil {
 		cr.Status.AtProvider.CreationDate = &metav1.Time{*resp.CreationDate}
+	} else {
+		cr.Status.AtProvider.CreationDate = nil
+	}
+	if resp.Name != nil {
+		cr.Spec.ForProvider.Name = resp.Name
+	} else {
+		cr.Spec.ForProvider.Name = nil
 	}
 
 	return cr
@@ -94,5 +103,5 @@ func GenerateDeleteActivityInput(cr *svcapitypes.Activity) *svcsdk.DeleteActivit
 // IsNotFound returns whether the given error is of type NotFound or not.
 func IsNotFound(err error) bool {
 	awsErr, ok := err.(awserr.Error)
-	return ok && awsErr.Code() == "UNKNOWN"
+	return ok && awsErr.Code() == "ActivityDoesNotExist"
 }

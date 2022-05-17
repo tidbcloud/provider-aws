@@ -18,6 +18,7 @@ package s3
 
 import (
 	"context"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
@@ -53,19 +54,20 @@ const (
 )
 
 // SetupBucket adds a controller that reconciles Buckets.
-func SetupBucket(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
+func SetupBucket(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll time.Duration) error {
 	name := managed.ControllerName(v1beta1.BucketGroupKind)
 	logger := l.WithValues("controller", name)
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter: ratelimiter.NewDefaultManagedRateLimiter(rl),
+			RateLimiter: ratelimiter.NewController(rl),
 		}).
 		For(&v1beta1.Bucket{}).
 		Complete(managed.NewReconciler(mgr,
 			resource.ManagedKind(v1beta1.BucketGroupVersionKind),
 			managed.WithExternalConnecter(&connector{kube: mgr.GetClient(), newClientFn: s3.NewClient, logger: logger}),
 			managed.WithReferenceResolver(managed.NewAPISimpleReferenceResolver(mgr.GetClient())),
+			managed.WithPollInterval(poll),
 			managed.WithLogger(logger),
 			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
@@ -102,7 +104,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{}, errors.New(errUnexpectedObject)
 	}
 
-	if _, err := e.s3client.HeadBucketRequest(&awss3.HeadBucketInput{Bucket: aws.String(meta.GetExternalName(cr))}).Send(ctx); err != nil {
+	if _, err := e.s3client.HeadBucket(ctx, &awss3.HeadBucketInput{Bucket: aws.String(meta.GetExternalName(cr))}); err != nil {
 		return managed.ExternalObservation{}, awsclient.Wrap(resource.Ignore(s3.IsNotFound, err), errHead)
 	}
 
@@ -160,8 +162,8 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	if !ok {
 		return managed.ExternalCreation{}, errors.New(errUnexpectedObject)
 	}
-	cr.Status.SetConditions(xpv1.Creating())
-	_, err := e.s3client.CreateBucketRequest(s3.GenerateCreateBucketInput(meta.GetExternalName(cr), cr.Spec.ForProvider)).Send(ctx)
+
+	_, err := e.s3client.CreateBucket(ctx, s3.GenerateCreateBucketInput(meta.GetExternalName(cr), cr.Spec.ForProvider))
 	if resource.Ignore(s3.IsAlreadyExists, err) != nil {
 		return managed.ExternalCreation{}, awsclient.Wrap(err, errCreate)
 	}
@@ -222,6 +224,6 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 	}
 
 	cr.Status.SetConditions(xpv1.Deleting())
-	_, err := e.s3client.DeleteBucketRequest(&awss3.DeleteBucketInput{Bucket: aws.String(meta.GetExternalName(cr))}).Send(ctx)
+	_, err := e.s3client.DeleteBucket(ctx, &awss3.DeleteBucketInput{Bucket: aws.String(meta.GetExternalName(cr))})
 	return resource.Ignore(s3.IsNotFound, err)
 }

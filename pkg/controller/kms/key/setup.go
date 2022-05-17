@@ -2,6 +2,7 @@ package key
 
 import (
 	"context"
+	"time"
 
 	svcsdk "github.com/aws/aws-sdk-go/service/kms"
 	svcsdkapi "github.com/aws/aws-sdk-go/service/kms/kmsiface"
@@ -23,7 +24,7 @@ import (
 )
 
 // SetupKey adds a controller that reconciles Key.
-func SetupKey(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
+func SetupKey(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll time.Duration) error {
 	name := managed.ControllerName(svcapitypes.KeyGroupKind)
 	opts := []option{
 		func(e *external) {
@@ -42,12 +43,14 @@ func SetupKey(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) erro
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter: ratelimiter.NewDefaultManagedRateLimiter(rl),
+			RateLimiter: ratelimiter.NewController(rl),
 		}).
 		For(&svcapitypes.Key{}).
 		Complete(managed.NewReconciler(mgr,
 			resource.ManagedKind(svcapitypes.KeyGroupVersionKind),
 			managed.WithExternalConnecter(&connector{kube: mgr.GetClient(), opts: opts}),
+			managed.WithPollInterval(poll),
+			managed.WithInitializers(),
 			managed.WithLogger(l.WithValues("controller", name)),
 			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
@@ -70,6 +73,7 @@ func postObserve(_ context.Context, cr *svcapitypes.Key, obj *svcsdk.DescribeKey
 		cr.SetConditions(xpv1.Unavailable())
 	case string(svcapitypes.KeyState_PendingDeletion):
 		cr.SetConditions(xpv1.Deleting())
+		return managed.ExternalObservation{ResourceExists: false}, nil
 	case string(svcapitypes.KeyState_PendingImport):
 		cr.SetConditions(xpv1.Unavailable())
 	case string(svcapitypes.KeyState_Unavailable):
@@ -84,7 +88,7 @@ func postCreate(_ context.Context, cr *svcapitypes.Key, obj *svcsdk.CreateKeyOut
 		return creation, err
 	}
 	meta.SetExternalName(cr, awsclients.StringValue(obj.KeyMetadata.KeyId))
-	return managed.ExternalCreation{ExternalNameAssigned: true}, nil
+	return managed.ExternalCreation{}, nil
 }
 
 type updater struct {

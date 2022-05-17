@@ -30,6 +30,8 @@ type ReplicationConfiguration struct {
 	//
 	// At least one of role, roleRef or roleSelector fields is required.
 	// +optional
+	// +crossplane:generate:reference:type=github.com/crossplane/provider-aws/apis/iam/v1beta1.Role
+	// +crossplane:generate:reference:extractor=github.com/crossplane/provider-aws/apis/iam/v1beta1.RoleARN()
 	Role *string `json:"role,omitempty"`
 
 	// RoleRef references an IAMRole to retrieve its Name
@@ -93,7 +95,7 @@ type ReplicationRule struct {
 	//
 	// For more information, see Replication (https://docs.aws.amazon.com/AmazonS3/latest/dev/replication.html)
 	// in the Amazon Simple Storage Service Developer Guide.
-	Priority *int64 `json:"priority,omitempty"`
+	Priority int32 `json:"priority,omitempty"`
 
 	// A container that describes additional filters for identifying the source
 	// objects that you want to replicate. You can choose to enable or disable the
@@ -123,10 +125,9 @@ type ReplicationRule struct {
 // see Backward Compatibility (https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-add-config.html#replication-backward-compat-considerations).
 type DeleteMarkerReplication struct {
 	// Indicates whether to replicate delete markers.
-	// In the current implementation, Amazon S3 doesn't replicate the delete markers.
-	// The status must be "Disabled".
-	// +kubebuilder:validation:Enum=Disabled
-	Status string `json:"Status"`
+	// Valid values are "Enabled" or "Disabled"
+	// +kubebuilder:validation:Enum=Enabled;Disabled
+	Status string `json:"status"`
 }
 
 // Destination specifies information about where to publish analysis or configuration results
@@ -152,6 +153,8 @@ type Destination struct {
 	// store the results.
 	// At least one of bucket, bucketRef or bucketSelector is required.
 	// +optional
+	// +crossplane:generate:reference:type=Bucket
+	// +crossplane:generate:reference:extractor=BucketARN()
 	Bucket *string `json:"bucket,omitempty"`
 
 	// BucketRef references a Bucket to retrieve its Name
@@ -183,7 +186,7 @@ type Destination struct {
 	// For valid values, see the StorageClass element of the PUT Bucket replication
 	// (https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTreplication.html)
 	// action in the Amazon Simple Storage Service API Reference.
-	// +kubebuilder:validation:Enum=GLACIER;STANDARD_IA;ONEZONE_IA;INTELLIGENT_TIERING;DEEP_ARCHIVE
+	// +kubebuilder:validation:Enum=STANDARD;GLACIER;STANDARD_IA;ONEZONE_IA;INTELLIGENT_TIERING;DEEP_ARCHIVE
 	// +optional
 	StorageClass *string `json:"storageClass"`
 }
@@ -206,7 +209,16 @@ type EncryptionConfiguration struct {
 	// supports symmetric customer managed CMKs. For more information, see Using
 	// Symmetric and Asymmetric Keys (https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html)
 	// in the AWS Key Management Service Developer Guide.
-	ReplicaKmsKeyID string `json:"replicaKmsKeyId"`
+	// +crossplane:generate:reference:type=github.com/crossplane/provider-aws/apis/kms/v1alpha1.Key
+	ReplicaKmsKeyID *string `json:"replicaKmsKeyId"`
+
+	// ReplicaKmsKeyIDRef references an KMSKey to retrieve its ID
+	// +optional
+	ReplicaKmsKeyIDRef *xpv1.Reference `json:"replicaKmsKeyIdRef,omitempty"`
+
+	// ReplicaKmsKeyIDSelector selects a reference to an KMSKey to retrieve its ID
+	// +optional
+	ReplicaKmsKeyIDSelector *xpv1.Selector `json:"replicaKmsKeyIdSelector,omitempty"`
 }
 
 // Metrics specifies replication metrics-related settings enabling metrics
@@ -231,7 +243,7 @@ type ReplicationTimeValue struct {
 	// Contains an integer specifying time in minutes.
 	//
 	// Valid values: 15 minutes.
-	Minutes int64 `json:"minutes"`
+	Minutes int32 `json:"minutes"`
 }
 
 // ReplicationTime specifies S3 Replication Time Control (S3 RTC) related information,

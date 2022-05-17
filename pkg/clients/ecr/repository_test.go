@@ -5,12 +5,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/crossplane/provider-aws/apis/ecr/v1beta1"
+
+	"github.com/aws/smithy-go/document"
+
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
+	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/crossplane/provider-aws/apis/ecr/v1alpha1"
 	aws "github.com/crossplane/provider-aws/pkg/clients"
 )
 
@@ -23,32 +27,32 @@ var (
 	registryID      = "123"
 	repositoryARN   = "arn"
 	repositoryURI   = "testuri"
-	imageScanConfig = v1alpha1.ImageScanningConfiguration{
+	imageScanConfig = v1beta1.ImageScanningConfiguration{
 		ScanOnPush: true,
 	}
-	awsImageScanConfig = ecr.ImageScanningConfiguration{
-		ScanOnPush: &imageScanConfig.ScanOnPush,
+	awsImageScanConfig = ecrtypes.ImageScanningConfiguration{
+		ScanOnPush: imageScanConfig.ScanOnPush,
 	}
-	ecrTag    = ecr.Tag{Key: &testKey, Value: &testValue}
-	alpha1Tag = v1alpha1.Tag{Key: testKey, Value: testValue}
+	ecrTag    = ecrtypes.Tag{Key: &testKey, Value: &testValue}
+	alpha1Tag = v1beta1.Tag{Key: testKey, Value: testValue}
 )
 
 func TestGenerateRepositoryObservation(t *testing.T) {
 	cases := map[string]struct {
-		in  ecr.Repository
-		out v1alpha1.RepositoryObservation
+		in  ecrtypes.Repository
+		out v1beta1.RepositoryObservation
 	}{
 		"AllFilled": {
-			in: ecr.Repository{
+			in: ecrtypes.Repository{
 				CreatedAt:                  &createTime,
 				ImageScanningConfiguration: &awsImageScanConfig,
-				ImageTagMutability:         ecr.ImageTagMutability(tagMutability),
+				ImageTagMutability:         ecrtypes.ImageTagMutability(tagMutability),
 				RegistryId:                 aws.String(registryID),
 				RepositoryName:             aws.String(repositoryName),
 				RepositoryArn:              aws.String(repositoryARN),
 				RepositoryUri:              aws.String(repositoryURI),
 			},
-			out: v1alpha1.RepositoryObservation{
+			out: v1beta1.RepositoryObservation{
 				CreatedAt:      &metav1.Time{Time: createTime},
 				RegistryID:     registryID,
 				RepositoryName: repositoryName,
@@ -70,9 +74,9 @@ func TestGenerateRepositoryObservation(t *testing.T) {
 
 func TestIsRepositoryUpToDate(t *testing.T) {
 	type args struct {
-		ecrTags []ecr.Tag
-		e       v1alpha1.RepositoryParameters
-		repo    ecr.Repository
+		ecrTags []ecrtypes.Tag
+		e       v1beta1.RepositoryParameters
+		repo    ecrtypes.Repository
 	}
 
 	cases := map[string]struct {
@@ -81,28 +85,28 @@ func TestIsRepositoryUpToDate(t *testing.T) {
 	}{
 		"SameFields": {
 			args: args{
-				ecrTags: []ecr.Tag{ecrTag},
-				e: v1alpha1.RepositoryParameters{
+				ecrTags: []ecrtypes.Tag{ecrTag},
+				e: v1beta1.RepositoryParameters{
 					ImageScanningConfiguration: &imageScanConfig,
 					ImageTagMutability:         &tagMutability,
-					Tags:                       []v1alpha1.Tag{alpha1Tag},
+					Tags:                       []v1beta1.Tag{alpha1Tag},
 				},
-				repo: ecr.Repository{
+				repo: ecrtypes.Repository{
 					ImageScanningConfiguration: &awsImageScanConfig,
-					ImageTagMutability:         ecr.ImageTagMutabilityMutable,
+					ImageTagMutability:         ecrtypes.ImageTagMutabilityMutable,
 				},
 			},
 			want: true,
 		},
 		"DifferentFields": {
 			args: args{
-				ecrTags: []ecr.Tag{},
-				e: v1alpha1.RepositoryParameters{
-					Tags: []v1alpha1.Tag{alpha1Tag},
+				ecrTags: []ecrtypes.Tag{},
+				e: v1beta1.RepositoryParameters{
+					Tags: []v1beta1.Tag{alpha1Tag},
 				},
-				repo: ecr.Repository{
+				repo: ecrtypes.Repository{
 					ImageScanningConfiguration: &awsImageScanConfig,
-					ImageTagMutability:         ecr.ImageTagMutabilityMutable,
+					ImageTagMutability:         ecrtypes.ImageTagMutabilityMutable,
 				},
 			},
 			want: false,
@@ -122,7 +126,7 @@ func TestIsRepositoryUpToDate(t *testing.T) {
 func TestGenerateCreateRepositoryInput(t *testing.T) {
 	type args struct {
 		name string
-		p    *v1alpha1.RepositoryParameters
+		p    *v1beta1.RepositoryParameters
 	}
 
 	cases := map[string]struct {
@@ -132,29 +136,29 @@ func TestGenerateCreateRepositoryInput(t *testing.T) {
 		"AllFields": {
 			args: args{
 				name: repositoryName,
-				p: &v1alpha1.RepositoryParameters{
-					Tags:                       []v1alpha1.Tag{alpha1Tag},
+				p: &v1beta1.RepositoryParameters{
+					Tags:                       []v1beta1.Tag{alpha1Tag},
 					ImageScanningConfiguration: &imageScanConfig,
 					ImageTagMutability:         &tagMutability,
 				},
 			},
 			want: &ecr.CreateRepositoryInput{
 				RepositoryName:             &repositoryName,
-				ImageTagMutability:         ecr.ImageTagMutabilityMutable,
+				ImageTagMutability:         ecrtypes.ImageTagMutabilityMutable,
 				ImageScanningConfiguration: &awsImageScanConfig,
 			},
 		},
 		"SomeFields": {
 			args: args{
 				name: repositoryName,
-				p: &v1alpha1.RepositoryParameters{
-					Tags:               []v1alpha1.Tag{alpha1Tag},
+				p: &v1beta1.RepositoryParameters{
+					Tags:               []v1beta1.Tag{alpha1Tag},
 					ImageTagMutability: &tagMutability,
 				},
 			},
 			want: &ecr.CreateRepositoryInput{
 				RepositoryName:     &repositoryName,
-				ImageTagMutability: ecr.ImageTagMutabilityMutable,
+				ImageTagMutability: ecrtypes.ImageTagMutabilityMutable,
 			},
 		},
 	}
@@ -162,7 +166,7 @@ func TestGenerateCreateRepositoryInput(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			got := GenerateCreateRepositoryInput(tc.args.name, tc.args.p)
-			if diff := cmp.Diff(tc.want, got); diff != "" {
+			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreTypes(document.NoSerde{})); diff != "" {
 				t.Errorf("r: -want, +got:\n%s", diff)
 			}
 		})
@@ -171,35 +175,35 @@ func TestGenerateCreateRepositoryInput(t *testing.T) {
 
 func TestLateInitialize(t *testing.T) {
 	cases := map[string]struct {
-		parameters *v1alpha1.RepositoryParameters
-		repository *ecr.Repository
-		want       *v1alpha1.RepositoryParameters
+		parameters *v1beta1.RepositoryParameters
+		repository *ecrtypes.Repository
+		want       *v1beta1.RepositoryParameters
 	}{
 		"AllOptionalFields": {
-			parameters: &v1alpha1.RepositoryParameters{},
-			repository: &ecr.Repository{
+			parameters: &v1beta1.RepositoryParameters{},
+			repository: &ecrtypes.Repository{
 				ImageScanningConfiguration: &awsImageScanConfig,
-				ImageTagMutability:         ecr.ImageTagMutabilityMutable,
+				ImageTagMutability:         ecrtypes.ImageTagMutabilityMutable,
 			},
-			want: &v1alpha1.RepositoryParameters{
+			want: &v1beta1.RepositoryParameters{
 				ImageScanningConfiguration: &imageScanConfig,
 				ImageTagMutability:         &tagMutability,
 			},
 		},
 		"SomeFieldsDontOverwrite": {
-			parameters: &v1alpha1.RepositoryParameters{
+			parameters: &v1beta1.RepositoryParameters{
 				ImageScanningConfiguration: &imageScanConfig,
 				ImageTagMutability:         &tagMutability,
-				Tags:                       []v1alpha1.Tag{alpha1Tag},
+				Tags:                       []v1beta1.Tag{alpha1Tag},
 			},
-			repository: &ecr.Repository{
+			repository: &ecrtypes.Repository{
 				ImageScanningConfiguration: &awsImageScanConfig,
-				ImageTagMutability:         ecr.ImageTagMutabilityMutable,
+				ImageTagMutability:         ecrtypes.ImageTagMutabilityMutable,
 			},
-			want: &v1alpha1.RepositoryParameters{
+			want: &v1beta1.RepositoryParameters{
 				ImageScanningConfiguration: &imageScanConfig,
 				ImageTagMutability:         &tagMutability,
-				Tags:                       []v1alpha1.Tag{alpha1Tag},
+				Tags:                       []v1beta1.Tag{alpha1Tag},
 			},
 		},
 	}
@@ -216,11 +220,11 @@ func TestLateInitialize(t *testing.T) {
 
 func TestDiffTags(t *testing.T) {
 	type args struct {
-		local  []v1alpha1.Tag
-		remote []ecr.Tag
+		local  []v1beta1.Tag
+		remote []ecrtypes.Tag
 	}
 	type want struct {
-		add    []ecr.Tag
+		add    []ecrtypes.Tag
 		remove []string
 	}
 	cases := map[string]struct {
@@ -229,29 +233,29 @@ func TestDiffTags(t *testing.T) {
 	}{
 		"AllNew": {
 			args: args{
-				local: []v1alpha1.Tag{
+				local: []v1beta1.Tag{
 					{Key: "key", Value: "val"},
 				},
 			},
 			want: want{
-				add: []ecr.Tag{
+				add: []ecrtypes.Tag{
 					{Key: aws.String("key"), Value: aws.String("val")},
 				},
 			},
 		},
 		"SomeNew": {
 			args: args{
-				local: []v1alpha1.Tag{
+				local: []v1beta1.Tag{
 					{Key: "key", Value: "val"},
 					{Key: "key1", Value: "val1"},
 					{Key: "key2", Value: "val2"},
 				},
-				remote: []ecr.Tag{
+				remote: []ecrtypes.Tag{
 					{Key: aws.String("key"), Value: aws.String("val")},
 				},
 			},
 			want: want{
-				add: []ecr.Tag{
+				add: []ecrtypes.Tag{
 					{Key: aws.String("key1"), Value: aws.String("val1")},
 					{Key: aws.String("key2"), Value: aws.String("val2")},
 				},
@@ -259,19 +263,19 @@ func TestDiffTags(t *testing.T) {
 		},
 		"Update": {
 			args: args{
-				local: []v1alpha1.Tag{
+				local: []v1beta1.Tag{
 					{Key: "key", Value: "different"},
 					{Key: "key1", Value: "val1"},
 					{Key: "key2", Value: "val2"},
 				},
-				remote: []ecr.Tag{
+				remote: []ecrtypes.Tag{
 					{Key: aws.String("key"), Value: aws.String("val")},
 					{Key: aws.String("key1"), Value: aws.String("val1")},
 					{Key: aws.String("key2"), Value: aws.String("val2")},
 				},
 			},
 			want: want{
-				add: []ecr.Tag{
+				add: []ecrtypes.Tag{
 					{Key: aws.String("key"), Value: aws.String("different")},
 				},
 				remove: []string{"key"},
@@ -279,7 +283,7 @@ func TestDiffTags(t *testing.T) {
 		},
 		"RemoveAll": {
 			args: args{
-				remote: []ecr.Tag{
+				remote: []ecrtypes.Tag{
 					{Key: aws.String("key"), Value: aws.String("val")},
 					{Key: aws.String("key1"), Value: aws.String("val1")},
 					{Key: aws.String("key2"), Value: aws.String("val2")},
@@ -293,11 +297,11 @@ func TestDiffTags(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			tagCmp := cmpopts.SortSlices(func(i, j ecr.Tag) bool {
+			tagCmp := cmpopts.SortSlices(func(i, j ecrtypes.Tag) bool {
 				return aws.StringValue(i.Key) < aws.StringValue(j.Key)
 			})
 			add, remove := DiffTags(tc.args.local, tc.args.remote)
-			if diff := cmp.Diff(tc.want.add, add, tagCmp); diff != "" {
+			if diff := cmp.Diff(tc.want.add, add, tagCmp, cmpopts.IgnoreTypes(document.NoSerde{})); diff != "" {
 				t.Errorf("r: -want, +got:\n%s", diff)
 			}
 			sort.Strings(tc.want.remove)

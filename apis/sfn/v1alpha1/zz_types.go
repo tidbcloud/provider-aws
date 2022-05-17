@@ -22,6 +22,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Hack to avoid import errors during build...
+var (
+	_ = &metav1.Time{}
+)
+
+// +kubebuilder:skipversion
 type ActivityListItem struct {
 	ActivityARN *string `json:"activityARN,omitempty"`
 
@@ -30,14 +36,17 @@ type ActivityListItem struct {
 	Name *string `json:"name,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type ActivityScheduledEventDetails struct {
 	Resource *string `json:"resource,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type CloudWatchLogsLogGroup struct {
 	LogGroupARN *string `json:"logGroupARN,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type ExecutionListItem struct {
 	ExecutionARN *string `json:"executionARN,omitempty"`
 
@@ -50,22 +59,27 @@ type ExecutionListItem struct {
 	StopDate *metav1.Time `json:"stopDate,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type ExecutionStartedEventDetails struct {
 	RoleARN *string `json:"roleARN,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type HistoryEvent struct {
 	Timestamp *metav1.Time `json:"timestamp,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type LambdaFunctionScheduledEventDetails struct {
 	Resource *string `json:"resource,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type LogDestination struct {
 	CloudWatchLogsLogGroup *CloudWatchLogsLogGroup `json:"cloudWatchLogsLogGroup,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type LoggingConfiguration struct {
 	Destinations []*LogDestination `json:"destinations,omitempty"`
 
@@ -74,18 +88,22 @@ type LoggingConfiguration struct {
 	Level *string `json:"level,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type MapIterationEventDetails struct {
 	Name *string `json:"name,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type StateEnteredEventDetails struct {
 	Name *string `json:"name,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type StateExitedEventDetails struct {
 	Name *string `json:"name,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type StateMachineListItem struct {
 	CreationDate *metav1.Time `json:"creationDate,omitempty"`
 
@@ -96,18 +114,21 @@ type StateMachineListItem struct {
 	Type *string `json:"type_,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type Tag struct {
 	Key *string `json:"key,omitempty"`
 
 	Value *string `json:"value,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type TaskFailedEventDetails struct {
 	Resource *string `json:"resource,omitempty"`
 
 	ResourceType *string `json:"resourceType,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type TaskScheduledEventDetails struct {
 	Region *string `json:"region,omitempty"`
 
@@ -116,42 +137,49 @@ type TaskScheduledEventDetails struct {
 	ResourceType *string `json:"resourceType,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type TaskStartFailedEventDetails struct {
 	Resource *string `json:"resource,omitempty"`
 
 	ResourceType *string `json:"resourceType,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type TaskStartedEventDetails struct {
 	Resource *string `json:"resource,omitempty"`
 
 	ResourceType *string `json:"resourceType,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type TaskSubmitFailedEventDetails struct {
 	Resource *string `json:"resource,omitempty"`
 
 	ResourceType *string `json:"resourceType,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type TaskSubmittedEventDetails struct {
 	Resource *string `json:"resource,omitempty"`
 
 	ResourceType *string `json:"resourceType,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type TaskSucceededEventDetails struct {
 	Resource *string `json:"resource,omitempty"`
 
 	ResourceType *string `json:"resourceType,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type TaskTimedOutEventDetails struct {
 	Resource *string `json:"resource,omitempty"`
 
 	ResourceType *string `json:"resourceType,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type TracingConfiguration struct {
 	Enabled *bool `json:"enabled,omitempty"`
 }

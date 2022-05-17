@@ -6,7 +6,12 @@ PROJECT_REPO := github.com/crossplane/$(PROJECT_NAME)
 
 PLATFORMS ?= linux_amd64 linux_arm64
 
-CODE_GENERATOR_COMMIT ?= v0.1.0
+CODE_GENERATOR_COMMIT ?= 285d87b66b62fbfb859986ddf74c9f9b6ae743fb
+GENERATED_SERVICES="apigatewayv2,athena,cloudfront,cloudwatchlogs,dynamodb,elbv2,ec2,efs,glue,iot,kafka,kinesis,kms,lambda,mq,rds,secretsmanager,servicediscovery,sfn,transfer,ram"
+
+# kind-related versions
+KIND_VERSION ?= v0.11.1
+KIND_NODE_IMAGE_TAG ?= v1.19.11
 
 # -include will silently skip missing files, which allows us
 # to load those files with a target in the Makefile. If only
@@ -72,21 +77,12 @@ cobertura:
 
 crds.clean:
 	@$(INFO) cleaning generated CRDs
-	@find package/crds -name *.yaml -exec sed -i.sed -e '1,2d' {} \; || $(FAIL)
-	@find package/crds -name *.yaml.sed -delete || $(FAIL)
+	@find package/crds -name '*.yaml' -exec sed -i.sed -e '1,2d' {} \; || $(FAIL)
+	@find package/crds -name '*.yaml.sed' -delete || $(FAIL)
 	@$(OK) cleaned generated CRDs
 
-generate: crds.clean
-
-# Ensure a PR is ready for review.
-reviewable: generate lint
-	@go mod tidy
-
-# Ensure branch is clean.
-check-diff: reviewable
-	@$(INFO) checking that branch is clean
-	@test -z "$$(git status --porcelain)" || $(FAIL)
-	@$(OK) branch is clean
+generate.init: services.all
+generate.done: crds.clean
 
 manifests:
 	@$(WARN) Deprecated. Please run make generate instead.
@@ -97,13 +93,22 @@ e2e.run: test-integration
 # Run integration tests.
 test-integration: $(KIND) $(KUBECTL) $(HELM3)
 	@$(INFO) running integration tests using kind $(KIND_VERSION)
-	@$(ROOT_DIR)/cluster/local/integration_tests.sh || $(FAIL)
+	@KIND_NODE_IMAGE_TAG=${KIND_NODE_IMAGE_TAG} $(ROOT_DIR)/cluster/local/integration_tests.sh || $(FAIL)
 	@$(OK) integration tests passed
 
 # Update the submodules, such as the common build scripts.
 submodules:
 	@git submodule sync
 	@git submodule update --init --recursive
+
+# NOTE(hasheddan): the build submodule currently overrides XDG_CACHE_HOME in
+# order to force the Helm 3 to use the .work/helm directory. This causes Go on
+# Linux machines to use that directory as the build cache as well. We should
+# adjust this behavior in the build submodule because it is also causing Linux
+# users to duplicate their build cache, but for now we just make it easier to
+# identify its location in CI so that we cache between builds.
+go.cachedir:
+	@go env GOCACHE
 
 # This is for running out-of-cluster locally, and is for convenience. Running
 # this make target will print out the command which was used. For more control,
@@ -113,22 +118,29 @@ run: go.build
 	@# To see other arguments that can be provided, run the command with --help instead
 	$(GO_OUT_DIR)/provider --debug
 
-.PHONY: cobertura reviewable manifests submodules fallthrough test-integration run crds.clean
+.PHONY: cobertura manifests submodules fallthrough test-integration run crds.clean
 
-service: 
-	@if [ "$(ServiceID)" = "" ]; then \
-		echo "Error: Please specify value of 'ServiceID'."; \
+# NOTE(muvaf): ACK Code Generator is a separate Go module, hence we need to
+# be in its root directory to call "go run" properly.
+services: $(GOIMPORTS)
+	@if [ "$(SERVICES)" = "" ]; then \
+		echo "Error: Please specify the comma-seperated list of services via 'SERVICES' variable."; \
 		echo "For more info: https://github.com/crossplane/provider-aws/blob/master/CODE_GENERATION.md#code-generation"; \
 		exit 1; \
 	fi
 	@if [ ! -d "$(WORK_DIR)/code-generator" ]; then \
 		cd $(WORK_DIR) && git clone "https://github.com/aws-controllers-k8s/code-generator.git"; \
 	fi
+	@cd $(WORK_DIR)/code-generator && git fetch origin && git checkout $(CODE_GENERATOR_COMMIT)
+	@for svc in $$(echo "$(SERVICES)" | tr ',' ' '); do \
+		$(INFO) Generating $$svc controllers and CRDs; \
+		PATH="${PATH}:$(TOOLS_HOST_DIR)"; \
+		cd $(WORK_DIR)/code-generator && go run -tags codegen cmd/ack-generate/main.go crossplane $$svc --output ../../ || exit 1; \
+		$(OK) Generating $$svc controllers and CRDs; \
+	done
 
-	cd $(WORK_DIR)/code-generator && git fetch origin && git checkout $(CODE_GENERATOR_COMMIT); 
-	
-	@cd $(WORK_DIR)/code-generator && go run -tags codegen cmd/ack-generate/main.go crossplane $(ServiceID) --provider-dir ../../
-
+services.all:
+	@$(MAKE) services SERVICES=$(GENERATED_SERVICES)
 
 # ====================================================================================
 # Special Targets
@@ -136,7 +148,6 @@ service:
 define CROSSPLANE_MAKE_HELP
 Crossplane Targets:
     cobertura             Generate a coverage report for cobertura applying exclusions on generated files.
-    reviewable            Ensure a PR is ready for review.
     submodules            Update the submodules, such as the common build scripts.
     run                   Run crossplane locally, out-of-cluster. Useful for development.
 

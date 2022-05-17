@@ -18,22 +18,21 @@ package vpccidrblock
 
 import (
 	"context"
-	"net/http"
 	"testing"
-
-	"github.com/crossplane/crossplane-runtime/pkg/test"
-	"github.com/google/go-cmp/cmp"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
+	"github.com/crossplane/crossplane-runtime/pkg/test"
 
-	"github.com/crossplane/provider-aws/apis/ec2/v1alpha1"
+	"github.com/crossplane/provider-aws/apis/ec2/v1beta1"
 	awsclient "github.com/crossplane/provider-aws/pkg/clients"
 	"github.com/crossplane/provider-aws/pkg/clients/ec2"
 	"github.com/crossplane/provider-aws/pkg/clients/ec2/fake"
@@ -45,7 +44,7 @@ var (
 	matchAssociationID = "test"
 	ipv6CIDR           = "2002::1234:abcd:ffff:c0a8:101/64"
 	testStatus         = "status"
-	testState          = string(awsec2.VpcCidrBlockStateCodeAssociated)
+	testState          = string(types.VpcCidrBlockStateCodeAssociated)
 
 	errBoom = errors.New("boom")
 )
@@ -53,29 +52,29 @@ var (
 type args struct {
 	vpc  ec2.VPCCIDRBlockClient
 	kube client.Client
-	cr   *v1alpha1.VPCCIDRBlock
+	cr   *v1beta1.VPCCIDRBlock
 }
 
-type vpcCIDRBlockModifier func(*v1alpha1.VPCCIDRBlock)
+type vpcCIDRBlockModifier func(*v1beta1.VPCCIDRBlock)
 
 func withExternalName(name string) vpcCIDRBlockModifier {
-	return func(r *v1alpha1.VPCCIDRBlock) { meta.SetExternalName(r, name) }
+	return func(r *v1beta1.VPCCIDRBlock) { meta.SetExternalName(r, name) }
 }
 
 func withConditions(c ...xpv1.Condition) vpcCIDRBlockModifier {
-	return func(r *v1alpha1.VPCCIDRBlock) { r.Status.ConditionedStatus.Conditions = c }
+	return func(r *v1beta1.VPCCIDRBlock) { r.Status.ConditionedStatus.Conditions = c }
 }
 
-func withSpec(p v1alpha1.VPCCIDRBlockParameters) vpcCIDRBlockModifier {
-	return func(r *v1alpha1.VPCCIDRBlock) { r.Spec.ForProvider = p }
+func withSpec(p v1beta1.VPCCIDRBlockParameters) vpcCIDRBlockModifier {
+	return func(r *v1beta1.VPCCIDRBlock) { r.Spec.ForProvider = p }
 }
 
-func withStatus(s v1alpha1.VPCCIDRBlockObservation) vpcCIDRBlockModifier {
-	return func(r *v1alpha1.VPCCIDRBlock) { r.Status.AtProvider = s }
+func withStatus(s v1beta1.VPCCIDRBlockObservation) vpcCIDRBlockModifier {
+	return func(r *v1beta1.VPCCIDRBlock) { r.Status.AtProvider = s }
 }
 
-func vpcCIDRBlock(m ...vpcCIDRBlockModifier) *v1alpha1.VPCCIDRBlock {
-	cr := &v1alpha1.VPCCIDRBlock{}
+func vpcCIDRBlock(m ...vpcCIDRBlockModifier) *v1beta1.VPCCIDRBlock {
+	cr := &v1beta1.VPCCIDRBlock{}
 	for _, f := range m {
 		f(cr)
 	}
@@ -87,7 +86,7 @@ var _ managed.ExternalConnecter = &connector{}
 
 func TestObserve(t *testing.T) {
 	type want struct {
-		cr     *v1alpha1.VPCCIDRBlock
+		cr     *v1beta1.VPCCIDRBlock
 		result managed.ExternalObservation
 		err    error
 	}
@@ -102,39 +101,37 @@ func TestObserve(t *testing.T) {
 					MockUpdate: test.NewMockClient().Update,
 				},
 				vpc: &fake.MockVPCCIDRBlockClient{
-					MockDescribe: func(input *awsec2.DescribeVpcsInput) awsec2.DescribeVpcsRequest {
-						return awsec2.DescribeVpcsRequest{
-							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &awsec2.DescribeVpcsOutput{
-								Vpcs: []awsec2.Vpc{{
-									CidrBlockAssociationSet: []awsec2.VpcCidrBlockAssociation{
-										{
-											AssociationId: &matchAssociationID,
-											CidrBlock:     &cidr,
-											CidrBlockState: &awsec2.VpcCidrBlockState{
-												State:         awsec2.VpcCidrBlockStateCodeAssociated,
-												StatusMessage: &testStatus,
-											},
-										}},
-								}},
+					MockDescribe: func(ctx context.Context, input *awsec2.DescribeVpcsInput, opts []func(*awsec2.Options)) (*awsec2.DescribeVpcsOutput, error) {
+						return &awsec2.DescribeVpcsOutput{
+							Vpcs: []types.Vpc{{
+								CidrBlockAssociationSet: []types.VpcCidrBlockAssociation{
+									{
+										AssociationId: &matchAssociationID,
+										CidrBlock:     &cidr,
+										CidrBlockState: &types.VpcCidrBlockState{
+											State:         types.VpcCidrBlockStateCodeAssociated,
+											StatusMessage: &testStatus,
+										},
+									}},
 							}},
-						}
+						}, nil
 					},
 				},
-				cr: vpcCIDRBlock(withSpec(v1alpha1.VPCCIDRBlockParameters{
+				cr: vpcCIDRBlock(withSpec(v1beta1.VPCCIDRBlockParameters{
 					CIDRBlock: &cidr,
 					VPCID:     &vpcID,
 				}), withExternalName(matchAssociationID)),
 			},
 			want: want{
-				cr: vpcCIDRBlock(withSpec(v1alpha1.VPCCIDRBlockParameters{
+				cr: vpcCIDRBlock(withSpec(v1beta1.VPCCIDRBlockParameters{
 					VPCID:     &vpcID,
 					CIDRBlock: &cidr,
-				}), withStatus(v1alpha1.VPCCIDRBlockObservation{
-					AssociationID: &matchAssociationID,
-					CIDRBlock:     &cidr,
-					CIDRBlockState: &v1alpha1.VPCCIDRBlockState{
-						State:         &testState,
-						StatusMessage: &testStatus,
+				}), withStatus(v1beta1.VPCCIDRBlockObservation{
+					AssociationID: matchAssociationID,
+					CIDRBlock:     cidr,
+					CIDRBlockState: v1beta1.VPCCIDRBlockState{
+						State:         testState,
+						StatusMessage: testStatus,
 					},
 				}), withExternalName(matchAssociationID),
 					withConditions(xpv1.Available())),
@@ -150,39 +147,37 @@ func TestObserve(t *testing.T) {
 					MockUpdate: test.NewMockClient().Update,
 				},
 				vpc: &fake.MockVPCCIDRBlockClient{
-					MockDescribe: func(input *awsec2.DescribeVpcsInput) awsec2.DescribeVpcsRequest {
-						return awsec2.DescribeVpcsRequest{
-							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &awsec2.DescribeVpcsOutput{
-								Vpcs: []awsec2.Vpc{{
-									Ipv6CidrBlockAssociationSet: []awsec2.VpcIpv6CidrBlockAssociation{
-										{
-											AssociationId: &matchAssociationID,
-											Ipv6CidrBlock: &ipv6CIDR,
-											Ipv6CidrBlockState: &awsec2.VpcCidrBlockState{
-												State:         awsec2.VpcCidrBlockStateCodeAssociated,
-												StatusMessage: &testStatus,
-											},
-										}},
-								}},
+					MockDescribe: func(ctx context.Context, input *awsec2.DescribeVpcsInput, opts []func(*awsec2.Options)) (*awsec2.DescribeVpcsOutput, error) {
+						return &awsec2.DescribeVpcsOutput{
+							Vpcs: []types.Vpc{{
+								Ipv6CidrBlockAssociationSet: []types.VpcIpv6CidrBlockAssociation{
+									{
+										AssociationId: &matchAssociationID,
+										Ipv6CidrBlock: &ipv6CIDR,
+										Ipv6CidrBlockState: &types.VpcCidrBlockState{
+											State:         types.VpcCidrBlockStateCodeAssociated,
+											StatusMessage: &testStatus,
+										},
+									}},
 							}},
-						}
+						}, nil
 					},
 				},
-				cr: vpcCIDRBlock(withSpec(v1alpha1.VPCCIDRBlockParameters{
+				cr: vpcCIDRBlock(withSpec(v1beta1.VPCCIDRBlockParameters{
 					IPv6CIDRBlock: &ipv6CIDR,
 					VPCID:         &vpcID,
 				}), withExternalName(matchAssociationID)),
 			},
 			want: want{
-				cr: vpcCIDRBlock(withSpec(v1alpha1.VPCCIDRBlockParameters{
+				cr: vpcCIDRBlock(withSpec(v1beta1.VPCCIDRBlockParameters{
 					VPCID:         &vpcID,
 					IPv6CIDRBlock: &ipv6CIDR,
-				}), withStatus(v1alpha1.VPCCIDRBlockObservation{
-					AssociationID: &matchAssociationID,
-					IPv6CIDRBlock: &ipv6CIDR,
-					IPv6CIDRBlockState: &v1alpha1.VPCCIDRBlockState{
-						State:         &testState,
-						StatusMessage: &testStatus,
+				}), withStatus(v1beta1.VPCCIDRBlockObservation{
+					AssociationID: matchAssociationID,
+					IPv6CIDRBlock: ipv6CIDR,
+					IPv6CIDRBlockState: v1beta1.VPCCIDRBlockState{
+						State:         testState,
+						StatusMessage: testStatus,
 					},
 				}), withExternalName(matchAssociationID),
 					withConditions(xpv1.Available())),
@@ -198,22 +193,20 @@ func TestObserve(t *testing.T) {
 					MockUpdate: test.NewMockClient().Update,
 				},
 				vpc: &fake.MockVPCCIDRBlockClient{
-					MockDescribe: func(input *awsec2.DescribeVpcsInput) awsec2.DescribeVpcsRequest {
-						return awsec2.DescribeVpcsRequest{
-							Request: &aws.Request{HTTPRequest: &http.Request{}, Error: errBoom},
-						}
+					MockDescribe: func(ctx context.Context, input *awsec2.DescribeVpcsInput, opts []func(*awsec2.Options)) (*awsec2.DescribeVpcsOutput, error) {
+						return &awsec2.DescribeVpcsOutput{}, errBoom
 					},
 				},
-				cr: vpcCIDRBlock(withSpec(v1alpha1.VPCCIDRBlockParameters{
+				cr: vpcCIDRBlock(withSpec(v1beta1.VPCCIDRBlockParameters{
 					CIDRBlock: &cidr,
 					VPCID:     &vpcID,
 				}), withExternalName(matchAssociationID)),
 			},
 			want: want{
-				cr: vpcCIDRBlock(withSpec(v1alpha1.VPCCIDRBlockParameters{
+				cr: vpcCIDRBlock(withSpec(v1beta1.VPCCIDRBlockParameters{
 					VPCID:     &vpcID,
 					CIDRBlock: &cidr,
-				}), withStatus(v1alpha1.VPCCIDRBlockObservation{}), withExternalName(matchAssociationID)),
+				}), withStatus(v1beta1.VPCCIDRBlockObservation{}), withExternalName(matchAssociationID)),
 				err: awsclient.Wrap(errBoom, errDescribe),
 			},
 		},
@@ -239,7 +232,7 @@ func TestObserve(t *testing.T) {
 
 func TestCreate(t *testing.T) {
 	type want struct {
-		cr     *v1alpha1.VPCCIDRBlock
+		cr     *v1beta1.VPCCIDRBlock
 		result managed.ExternalCreation
 		err    error
 	}
@@ -251,77 +244,71 @@ func TestCreate(t *testing.T) {
 		"SuccessfulIPv4": {
 			args: args{
 				vpc: &fake.MockVPCCIDRBlockClient{
-					MockAssociate: func(input *awsec2.AssociateVpcCidrBlockInput) awsec2.AssociateVpcCidrBlockRequest {
-						return awsec2.AssociateVpcCidrBlockRequest{
-							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &awsec2.AssociateVpcCidrBlockOutput{
-								VpcId: aws.String(vpcID),
-								CidrBlockAssociation: &awsec2.VpcCidrBlockAssociation{
-									AssociationId:  aws.String(matchAssociationID),
-									CidrBlock:      aws.String(cidr),
-									CidrBlockState: &awsec2.VpcCidrBlockState{},
-								},
-							}},
-						}
+					MockAssociate: func(ctx context.Context, input *awsec2.AssociateVpcCidrBlockInput, opts []func(*awsec2.Options)) (*awsec2.AssociateVpcCidrBlockOutput, error) {
+						return &awsec2.AssociateVpcCidrBlockOutput{
+							VpcId: aws.String(vpcID),
+							CidrBlockAssociation: &types.VpcCidrBlockAssociation{
+								AssociationId:  aws.String(matchAssociationID),
+								CidrBlock:      aws.String(cidr),
+								CidrBlockState: &types.VpcCidrBlockState{},
+							},
+						}, nil
 					},
 				},
-				cr: vpcCIDRBlock(withSpec(v1alpha1.VPCCIDRBlockParameters{
+				cr: vpcCIDRBlock(withSpec(v1beta1.VPCCIDRBlockParameters{
 					CIDRBlock: &cidr,
 					VPCID:     &vpcID,
 				})),
 			},
 			want: want{
-				cr: vpcCIDRBlock(withSpec(v1alpha1.VPCCIDRBlockParameters{
+				cr: vpcCIDRBlock(withSpec(v1beta1.VPCCIDRBlockParameters{
 					CIDRBlock: &cidr,
 					VPCID:     &vpcID,
 				}), withExternalName(matchAssociationID)),
-				result: managed.ExternalCreation{ExternalNameAssigned: true},
+				result: managed.ExternalCreation{},
 			},
 		},
 		"SuccessfulIPv6": {
 			args: args{
 				vpc: &fake.MockVPCCIDRBlockClient{
-					MockAssociate: func(input *awsec2.AssociateVpcCidrBlockInput) awsec2.AssociateVpcCidrBlockRequest {
-						return awsec2.AssociateVpcCidrBlockRequest{
-							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &awsec2.AssociateVpcCidrBlockOutput{
-								VpcId: aws.String(vpcID),
-								Ipv6CidrBlockAssociation: &awsec2.VpcIpv6CidrBlockAssociation{
-									AssociationId:      aws.String(matchAssociationID),
-									Ipv6CidrBlock:      aws.String(ipv6CIDR),
-									Ipv6CidrBlockState: &awsec2.VpcCidrBlockState{},
-								},
-							}},
-						}
+					MockAssociate: func(ctx context.Context, input *awsec2.AssociateVpcCidrBlockInput, opts []func(*awsec2.Options)) (*awsec2.AssociateVpcCidrBlockOutput, error) {
+						return &awsec2.AssociateVpcCidrBlockOutput{
+							VpcId: aws.String(vpcID),
+							Ipv6CidrBlockAssociation: &types.VpcIpv6CidrBlockAssociation{
+								AssociationId:      aws.String(matchAssociationID),
+								Ipv6CidrBlock:      aws.String(ipv6CIDR),
+								Ipv6CidrBlockState: &types.VpcCidrBlockState{},
+							},
+						}, nil
 					},
 				},
-				cr: vpcCIDRBlock(withSpec(v1alpha1.VPCCIDRBlockParameters{
+				cr: vpcCIDRBlock(withSpec(v1beta1.VPCCIDRBlockParameters{
 					IPv6CIDRBlock: &ipv6CIDR,
 					VPCID:         &vpcID,
 				})),
 			},
 			want: want{
-				cr: vpcCIDRBlock(withSpec(v1alpha1.VPCCIDRBlockParameters{
+				cr: vpcCIDRBlock(withSpec(v1beta1.VPCCIDRBlockParameters{
 					IPv6CIDRBlock: &ipv6CIDR,
 					VPCID:         &vpcID,
 				}), withExternalName(matchAssociationID)),
-				result: managed.ExternalCreation{ExternalNameAssigned: true},
+				result: managed.ExternalCreation{},
 			},
 		},
 		"CreateFail": {
 			args: args{
 				vpc: &fake.MockVPCCIDRBlockClient{
-					MockAssociate: func(input *awsec2.AssociateVpcCidrBlockInput) awsec2.AssociateVpcCidrBlockRequest {
-						return awsec2.AssociateVpcCidrBlockRequest{
-							Request: &aws.Request{HTTPRequest: &http.Request{}, Error: errBoom},
-						}
+					MockAssociate: func(ctx context.Context, input *awsec2.AssociateVpcCidrBlockInput, opts []func(*awsec2.Options)) (*awsec2.AssociateVpcCidrBlockOutput, error) {
+						return &awsec2.AssociateVpcCidrBlockOutput{}, errBoom
 					},
 				},
-				cr: vpcCIDRBlock(withSpec(v1alpha1.VPCCIDRBlockParameters{
+				cr: vpcCIDRBlock(withSpec(v1beta1.VPCCIDRBlockParameters{
 					CIDRBlock: &cidr,
 					VPCID:     &vpcID,
 				})),
 			},
 			want: want{
-				cr: vpcCIDRBlock(withSpec(v1alpha1.VPCCIDRBlockParameters{
+				cr: vpcCIDRBlock(withSpec(v1beta1.VPCCIDRBlockParameters{
 					CIDRBlock: &cidr,
 					VPCID:     &vpcID,
 				})),
@@ -350,7 +337,7 @@ func TestCreate(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	type want struct {
-		cr  *v1alpha1.VPCCIDRBlock
+		cr  *v1beta1.VPCCIDRBlock
 		err error
 	}
 
@@ -361,28 +348,26 @@ func TestDelete(t *testing.T) {
 		"Successful": {
 			args: args{
 				vpc: &fake.MockVPCCIDRBlockClient{
-					MockDisassociate: func(input *awsec2.DisassociateVpcCidrBlockInput) awsec2.DisassociateVpcCidrBlockRequest {
-						return awsec2.DisassociateVpcCidrBlockRequest{
-							Request: &aws.Request{HTTPRequest: &http.Request{}, Retryer: aws.NoOpRetryer{}, Data: &awsec2.DisassociateVpcCidrBlockOutput{}},
-						}
+					MockDisassociate: func(ctx context.Context, input *awsec2.DisassociateVpcCidrBlockInput, opts []func(*awsec2.Options)) (*awsec2.DisassociateVpcCidrBlockOutput, error) {
+						return &awsec2.DisassociateVpcCidrBlockOutput{}, nil
 					},
 				},
-				cr: vpcCIDRBlock(withStatus(v1alpha1.VPCCIDRBlockObservation{
-					AssociationID: &matchAssociationID,
-					CIDRBlock:     &cidr,
-					CIDRBlockState: &v1alpha1.VPCCIDRBlockState{
-						State:         &testState,
-						StatusMessage: &testStatus,
+				cr: vpcCIDRBlock(withStatus(v1beta1.VPCCIDRBlockObservation{
+					AssociationID: matchAssociationID,
+					CIDRBlock:     cidr,
+					CIDRBlockState: v1beta1.VPCCIDRBlockState{
+						State:         testState,
+						StatusMessage: testStatus,
 					},
 				})),
 			},
 			want: want{
-				cr: vpcCIDRBlock(withStatus(v1alpha1.VPCCIDRBlockObservation{
-					AssociationID: &matchAssociationID,
-					CIDRBlock:     &cidr,
-					CIDRBlockState: &v1alpha1.VPCCIDRBlockState{
-						State:         &testState,
-						StatusMessage: &testStatus,
+				cr: vpcCIDRBlock(withStatus(v1beta1.VPCCIDRBlockObservation{
+					AssociationID: matchAssociationID,
+					CIDRBlock:     cidr,
+					CIDRBlockState: v1beta1.VPCCIDRBlockState{
+						State:         testState,
+						StatusMessage: testStatus,
 					},
 				})),
 			},
@@ -390,28 +375,26 @@ func TestDelete(t *testing.T) {
 		"DeleteFailed": {
 			args: args{
 				vpc: &fake.MockVPCCIDRBlockClient{
-					MockDisassociate: func(input *awsec2.DisassociateVpcCidrBlockInput) awsec2.DisassociateVpcCidrBlockRequest {
-						return awsec2.DisassociateVpcCidrBlockRequest{
-							Request: &aws.Request{HTTPRequest: &http.Request{}, Error: errBoom},
-						}
+					MockDisassociate: func(ctx context.Context, input *awsec2.DisassociateVpcCidrBlockInput, opts []func(*awsec2.Options)) (*awsec2.DisassociateVpcCidrBlockOutput, error) {
+						return &awsec2.DisassociateVpcCidrBlockOutput{}, errBoom
 					},
 				},
-				cr: vpcCIDRBlock(withStatus(v1alpha1.VPCCIDRBlockObservation{
-					AssociationID: &matchAssociationID,
-					CIDRBlock:     &cidr,
-					CIDRBlockState: &v1alpha1.VPCCIDRBlockState{
-						State:         &testState,
-						StatusMessage: &testStatus,
+				cr: vpcCIDRBlock(withStatus(v1beta1.VPCCIDRBlockObservation{
+					AssociationID: matchAssociationID,
+					CIDRBlock:     cidr,
+					CIDRBlockState: v1beta1.VPCCIDRBlockState{
+						State:         testState,
+						StatusMessage: testStatus,
 					},
 				})),
 			},
 			want: want{
-				cr: vpcCIDRBlock(withStatus(v1alpha1.VPCCIDRBlockObservation{
-					AssociationID: &matchAssociationID,
-					CIDRBlock:     &cidr,
-					CIDRBlockState: &v1alpha1.VPCCIDRBlockState{
-						State:         &testState,
-						StatusMessage: &testStatus,
+				cr: vpcCIDRBlock(withStatus(v1beta1.VPCCIDRBlockObservation{
+					AssociationID: matchAssociationID,
+					CIDRBlock:     cidr,
+					CIDRBlockState: v1beta1.VPCCIDRBlockState{
+						State:         testState,
+						StatusMessage: testStatus,
 					},
 				})),
 				err: awsclient.Wrap(errBoom, errDisassociate),

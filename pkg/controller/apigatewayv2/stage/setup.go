@@ -18,6 +18,7 @@ package stage
 
 import (
 	"context"
+	"time"
 
 	svcsdk "github.com/aws/aws-sdk-go/service/apigatewayv2"
 	"k8s.io/client-go/util/workqueue"
@@ -37,7 +38,7 @@ import (
 )
 
 // SetupStage adds a controller that reconciles Stage.
-func SetupStage(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
+func SetupStage(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll time.Duration) error {
 	name := managed.ControllerName(svcapitypes.StageGroupKind)
 	opts := []option{
 		func(e *external) {
@@ -50,12 +51,13 @@ func SetupStage(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) er
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter: ratelimiter.NewDefaultManagedRateLimiter(rl),
+			RateLimiter: ratelimiter.NewController(rl),
 		}).
 		For(&svcapitypes.Stage{}).
 		Complete(managed.NewReconciler(mgr,
 			resource.ManagedKind(svcapitypes.StageGroupVersionKind),
 			managed.WithExternalConnecter(&connector{kube: mgr.GetClient(), opts: opts}),
+			managed.WithPollInterval(poll),
 			managed.WithLogger(l.WithValues("controller", name)),
 			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
@@ -80,8 +82,8 @@ func preCreate(_ context.Context, cr *svcapitypes.Stage, obj *svcsdk.CreateStage
 	return nil
 }
 
-func preDelete(_ context.Context, cr *svcapitypes.Stage, obj *svcsdk.DeleteStageInput) error {
+func preDelete(_ context.Context, cr *svcapitypes.Stage, obj *svcsdk.DeleteStageInput) (bool, error) {
 	obj.StageName = aws.String(meta.GetExternalName(cr))
 	obj.ApiId = cr.Spec.ForProvider.CustomStageParameters.APIID
-	return nil
+	return false, nil
 }

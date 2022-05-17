@@ -18,6 +18,7 @@ package domainname
 
 import (
 	"context"
+	"time"
 
 	svcsdk "github.com/aws/aws-sdk-go/service/apigatewayv2"
 	"k8s.io/client-go/util/workqueue"
@@ -37,7 +38,7 @@ import (
 )
 
 // SetupDomainName adds a controller that reconciles DomainName.
-func SetupDomainName(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
+func SetupDomainName(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll time.Duration) error {
 	name := managed.ControllerName(svcapitypes.DomainNameGroupKind)
 	opts := []option{
 		func(e *external) {
@@ -50,12 +51,13 @@ func SetupDomainName(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimite
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter: ratelimiter.NewDefaultManagedRateLimiter(rl),
+			RateLimiter: ratelimiter.NewController(rl),
 		}).
 		For(&svcapitypes.DomainName{}).
 		Complete(managed.NewReconciler(mgr,
 			resource.ManagedKind(svcapitypes.DomainNameGroupVersionKind),
 			managed.WithExternalConnecter(&connector{kube: mgr.GetClient(), opts: opts}),
+			managed.WithPollInterval(poll),
 			managed.WithLogger(l.WithValues("controller", name)),
 			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
@@ -78,7 +80,7 @@ func preCreate(_ context.Context, cr *svcapitypes.DomainName, obj *svcsdk.Create
 	return nil
 }
 
-func preDelete(_ context.Context, cr *svcapitypes.DomainName, obj *svcsdk.DeleteDomainNameInput) error {
+func preDelete(_ context.Context, cr *svcapitypes.DomainName, obj *svcsdk.DeleteDomainNameInput) (bool, error) {
 	obj.DomainName = aws.String(meta.GetExternalName(cr))
-	return nil
+	return false, nil
 }

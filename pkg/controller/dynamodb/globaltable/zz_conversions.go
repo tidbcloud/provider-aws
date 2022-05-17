@@ -47,15 +47,36 @@ func GenerateGlobalTable(resp *svcsdk.DescribeGlobalTableOutput) *svcapitypes.Gl
 
 	if resp.GlobalTableDescription.CreationDateTime != nil {
 		cr.Status.AtProvider.CreationDateTime = &metav1.Time{*resp.GlobalTableDescription.CreationDateTime}
+	} else {
+		cr.Status.AtProvider.CreationDateTime = nil
 	}
 	if resp.GlobalTableDescription.GlobalTableArn != nil {
 		cr.Status.AtProvider.GlobalTableARN = resp.GlobalTableDescription.GlobalTableArn
+	} else {
+		cr.Status.AtProvider.GlobalTableARN = nil
 	}
 	if resp.GlobalTableDescription.GlobalTableName != nil {
 		cr.Status.AtProvider.GlobalTableName = resp.GlobalTableDescription.GlobalTableName
+	} else {
+		cr.Status.AtProvider.GlobalTableName = nil
 	}
 	if resp.GlobalTableDescription.GlobalTableStatus != nil {
 		cr.Status.AtProvider.GlobalTableStatus = resp.GlobalTableDescription.GlobalTableStatus
+	} else {
+		cr.Status.AtProvider.GlobalTableStatus = nil
+	}
+	if resp.GlobalTableDescription.ReplicationGroup != nil {
+		f4 := []*svcapitypes.Replica{}
+		for _, f4iter := range resp.GlobalTableDescription.ReplicationGroup {
+			f4elem := &svcapitypes.Replica{}
+			if f4iter.RegionName != nil {
+				f4elem.RegionName = f4iter.RegionName
+			}
+			f4 = append(f4, f4elem)
+		}
+		cr.Spec.ForProvider.ReplicationGroup = f4
+	} else {
+		cr.Spec.ForProvider.ReplicationGroup = nil
 	}
 
 	return cr

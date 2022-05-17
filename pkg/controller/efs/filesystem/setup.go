@@ -2,6 +2,7 @@ package filesystem
 
 import (
 	"context"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	svcsdk "github.com/aws/aws-sdk-go/service/efs"
@@ -22,7 +23,7 @@ import (
 )
 
 // SetupFileSystem adds a controller that reconciles FileSystem.
-func SetupFileSystem(mgr ctrl.Manager, l logging.Logger, limiter workqueue.RateLimiter) error {
+func SetupFileSystem(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll time.Duration) error {
 	name := managed.ControllerName(svcapitypes.FileSystemGroupKind)
 	opts := []option{
 		func(e *external) {
@@ -38,21 +39,19 @@ func SetupFileSystem(mgr ctrl.Manager, l logging.Logger, limiter workqueue.RateL
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter: ratelimiter.NewDefaultManagedRateLimiter(limiter),
+			RateLimiter: ratelimiter.NewController(rl),
 		}).
 		For(&svcapitypes.FileSystem{}).
 		Complete(managed.NewReconciler(mgr,
 			resource.ManagedKind(svcapitypes.FileSystemGroupVersionKind),
-			managed.WithInitializers(managed.NewDefaultProviderConfig(mgr.GetClient())),
+			managed.WithInitializers(),
 			managed.WithExternalConnecter(&connector{kube: mgr.GetClient(), opts: opts}),
+			managed.WithPollInterval(poll),
 			managed.WithLogger(l.WithValues("controller", name)),
 			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
 
-func isUpToDate(r bool, cr *svcapitypes.FileSystem, obj *svcsdk.DescribeFileSystemsOutput) (bool, error) {
-	if !r {
-		return r, nil
-	}
+func isUpToDate(cr *svcapitypes.FileSystem, obj *svcsdk.DescribeFileSystemsOutput) (bool, error) {
 	for _, res := range obj.FileSystems {
 		if awsclients.Int64Value(cr.Spec.ForProvider.ProvisionedThroughputInMibps) != int64(aws.Float64Value(res.ProvisionedThroughputInMibps)) {
 			return false, nil
@@ -109,5 +108,5 @@ func postCreate(_ context.Context, cr *svcapitypes.FileSystem, obj *svcsdk.FileS
 		return managed.ExternalCreation{}, err
 	}
 	meta.SetExternalName(cr, awsclients.StringValue(obj.FileSystemId))
-	return managed.ExternalCreation{ExternalNameAssigned: true}, nil
+	return managed.ExternalCreation{}, nil
 }

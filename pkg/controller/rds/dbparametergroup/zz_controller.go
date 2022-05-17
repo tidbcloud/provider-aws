@@ -120,9 +120,23 @@ func (e *external) Create(ctx context.Context, mg cpresource.Managed) (managed.E
 
 	if resp.DBParameterGroup.DBParameterGroupArn != nil {
 		cr.Status.AtProvider.DBParameterGroupARN = resp.DBParameterGroup.DBParameterGroupArn
+	} else {
+		cr.Status.AtProvider.DBParameterGroupARN = nil
+	}
+	if resp.DBParameterGroup.DBParameterGroupFamily != nil {
+		cr.Spec.ForProvider.DBParameterGroupFamily = resp.DBParameterGroup.DBParameterGroupFamily
+	} else {
+		cr.Spec.ForProvider.DBParameterGroupFamily = nil
 	}
 	if resp.DBParameterGroup.DBParameterGroupName != nil {
 		cr.Status.AtProvider.DBParameterGroupName = resp.DBParameterGroup.DBParameterGroupName
+	} else {
+		cr.Status.AtProvider.DBParameterGroupName = nil
+	}
+	if resp.DBParameterGroup.Description != nil {
+		cr.Spec.ForProvider.Description = resp.DBParameterGroup.Description
+	} else {
+		cr.Spec.ForProvider.Description = nil
 	}
 
 	return e.postCreate(ctx, cr, resp, managed.ExternalCreation{}, err)
@@ -138,10 +152,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 		return managed.ExternalUpdate{}, errors.Wrap(err, "pre-update failed")
 	}
 	resp, err := e.client.ModifyDBParameterGroupWithContext(ctx, input)
-	if err != nil {
-		return managed.ExternalUpdate{}, awsclient.Wrap(err, errUpdate)
-	}
-	return e.postUpdate(ctx, cr, resp, managed.ExternalUpdate{}, err)
+	return e.postUpdate(ctx, cr, resp, managed.ExternalUpdate{}, awsclient.Wrap(err, errUpdate))
 }
 
 func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error {

@@ -26,6 +26,7 @@ import (
 	svcsdkapi "github.com/aws/aws-sdk-go/service/apigatewayv2/apigatewayv2iface"
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
@@ -116,9 +117,73 @@ func (e *external) Create(ctx context.Context, mg cpresource.Managed) (managed.E
 
 	if resp.ApiMappingSelectionExpression != nil {
 		cr.Status.AtProvider.APIMappingSelectionExpression = resp.ApiMappingSelectionExpression
+	} else {
+		cr.Status.AtProvider.APIMappingSelectionExpression = nil
 	}
 	if resp.DomainName != nil {
 		cr.Status.AtProvider.DomainName = resp.DomainName
+	} else {
+		cr.Status.AtProvider.DomainName = nil
+	}
+	if resp.DomainNameConfigurations != nil {
+		f2 := []*svcapitypes.DomainNameConfiguration{}
+		for _, f2iter := range resp.DomainNameConfigurations {
+			f2elem := &svcapitypes.DomainNameConfiguration{}
+			if f2iter.ApiGatewayDomainName != nil {
+				f2elem.APIGatewayDomainName = f2iter.ApiGatewayDomainName
+			}
+			if f2iter.CertificateArn != nil {
+				f2elem.CertificateARN = f2iter.CertificateArn
+			}
+			if f2iter.CertificateName != nil {
+				f2elem.CertificateName = f2iter.CertificateName
+			}
+			if f2iter.CertificateUploadDate != nil {
+				f2elem.CertificateUploadDate = &metav1.Time{*f2iter.CertificateUploadDate}
+			}
+			if f2iter.DomainNameStatus != nil {
+				f2elem.DomainNameStatus = f2iter.DomainNameStatus
+			}
+			if f2iter.DomainNameStatusMessage != nil {
+				f2elem.DomainNameStatusMessage = f2iter.DomainNameStatusMessage
+			}
+			if f2iter.EndpointType != nil {
+				f2elem.EndpointType = f2iter.EndpointType
+			}
+			if f2iter.HostedZoneId != nil {
+				f2elem.HostedZoneID = f2iter.HostedZoneId
+			}
+			if f2iter.SecurityPolicy != nil {
+				f2elem.SecurityPolicy = f2iter.SecurityPolicy
+			}
+			f2 = append(f2, f2elem)
+		}
+		cr.Spec.ForProvider.DomainNameConfigurations = f2
+	} else {
+		cr.Spec.ForProvider.DomainNameConfigurations = nil
+	}
+	if resp.MutualTlsAuthentication != nil {
+		f3 := &svcapitypes.MutualTLSAuthenticationInput{}
+		if resp.MutualTlsAuthentication.TruststoreUri != nil {
+			f3.TruststoreURI = resp.MutualTlsAuthentication.TruststoreUri
+		}
+		if resp.MutualTlsAuthentication.TruststoreVersion != nil {
+			f3.TruststoreVersion = resp.MutualTlsAuthentication.TruststoreVersion
+		}
+		cr.Spec.ForProvider.MutualTLSAuthentication = f3
+	} else {
+		cr.Spec.ForProvider.MutualTLSAuthentication = nil
+	}
+	if resp.Tags != nil {
+		f4 := map[string]*string{}
+		for f4key, f4valiter := range resp.Tags {
+			var f4val string
+			f4val = *f4valiter
+			f4[f4key] = &f4val
+		}
+		cr.Spec.ForProvider.Tags = f4
+	} else {
+		cr.Spec.ForProvider.Tags = nil
 	}
 
 	return e.postCreate(ctx, cr, resp, managed.ExternalCreation{}, err)
@@ -134,10 +199,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 		return managed.ExternalUpdate{}, errors.Wrap(err, "pre-update failed")
 	}
 	resp, err := e.client.UpdateDomainNameWithContext(ctx, input)
-	if err != nil {
-		return managed.ExternalUpdate{}, awsclient.Wrap(err, errUpdate)
-	}
-	return e.postUpdate(ctx, cr, resp, managed.ExternalUpdate{}, err)
+	return e.postUpdate(ctx, cr, resp, managed.ExternalUpdate{}, awsclient.Wrap(err, errUpdate))
 }
 
 func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error {
@@ -147,11 +209,15 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error {
 	}
 	cr.Status.SetConditions(xpv1.Deleting())
 	input := GenerateDeleteDomainNameInput(cr)
-	if err := e.preDelete(ctx, cr, input); err != nil {
+	ignore, err := e.preDelete(ctx, cr, input)
+	if err != nil {
 		return errors.Wrap(err, "pre-delete failed")
 	}
-	_, err := e.client.DeleteDomainNameWithContext(ctx, input)
-	return awsclient.Wrap(cpresource.Ignore(IsNotFound, err), errDelete)
+	if ignore {
+		return nil
+	}
+	resp, err := e.client.DeleteDomainNameWithContext(ctx, input)
+	return e.postDelete(ctx, cr, resp, awsclient.Wrap(cpresource.Ignore(IsNotFound, err), errDelete))
 }
 
 type option func(*external)
@@ -167,6 +233,7 @@ func newExternal(kube client.Client, client svcsdkapi.ApiGatewayV2API, opts []op
 		preCreate:      nopPreCreate,
 		postCreate:     nopPostCreate,
 		preDelete:      nopPreDelete,
+		postDelete:     nopPostDelete,
 		preUpdate:      nopPreUpdate,
 		postUpdate:     nopPostUpdate,
 	}
@@ -185,7 +252,8 @@ type external struct {
 	isUpToDate     func(*svcapitypes.DomainName, *svcsdk.GetDomainNameOutput) (bool, error)
 	preCreate      func(context.Context, *svcapitypes.DomainName, *svcsdk.CreateDomainNameInput) error
 	postCreate     func(context.Context, *svcapitypes.DomainName, *svcsdk.CreateDomainNameOutput, managed.ExternalCreation, error) (managed.ExternalCreation, error)
-	preDelete      func(context.Context, *svcapitypes.DomainName, *svcsdk.DeleteDomainNameInput) error
+	preDelete      func(context.Context, *svcapitypes.DomainName, *svcsdk.DeleteDomainNameInput) (bool, error)
+	postDelete     func(context.Context, *svcapitypes.DomainName, *svcsdk.DeleteDomainNameOutput, error) error
 	preUpdate      func(context.Context, *svcapitypes.DomainName, *svcsdk.UpdateDomainNameInput) error
 	postUpdate     func(context.Context, *svcapitypes.DomainName, *svcsdk.UpdateDomainNameOutput, managed.ExternalUpdate, error) (managed.ExternalUpdate, error)
 }
@@ -193,8 +261,9 @@ type external struct {
 func nopPreObserve(context.Context, *svcapitypes.DomainName, *svcsdk.GetDomainNameInput) error {
 	return nil
 }
-func nopPostObserve(context.Context, *svcapitypes.DomainName, *svcsdk.GetDomainNameOutput, managed.ExternalObservation, error) (managed.ExternalObservation, error) {
-	return managed.ExternalObservation{}, nil
+
+func nopPostObserve(_ context.Context, _ *svcapitypes.DomainName, _ *svcsdk.GetDomainNameOutput, obs managed.ExternalObservation, err error) (managed.ExternalObservation, error) {
+	return obs, err
 }
 func nopLateInitialize(*svcapitypes.DomainNameParameters, *svcsdk.GetDomainNameOutput) error {
 	return nil
@@ -206,15 +275,18 @@ func alwaysUpToDate(*svcapitypes.DomainName, *svcsdk.GetDomainNameOutput) (bool,
 func nopPreCreate(context.Context, *svcapitypes.DomainName, *svcsdk.CreateDomainNameInput) error {
 	return nil
 }
-func nopPostCreate(context.Context, *svcapitypes.DomainName, *svcsdk.CreateDomainNameOutput, managed.ExternalCreation, error) (managed.ExternalCreation, error) {
-	return managed.ExternalCreation{}, nil
+func nopPostCreate(_ context.Context, _ *svcapitypes.DomainName, _ *svcsdk.CreateDomainNameOutput, cre managed.ExternalCreation, err error) (managed.ExternalCreation, error) {
+	return cre, err
 }
-func nopPreDelete(context.Context, *svcapitypes.DomainName, *svcsdk.DeleteDomainNameInput) error {
-	return nil
+func nopPreDelete(context.Context, *svcapitypes.DomainName, *svcsdk.DeleteDomainNameInput) (bool, error) {
+	return false, nil
+}
+func nopPostDelete(_ context.Context, _ *svcapitypes.DomainName, _ *svcsdk.DeleteDomainNameOutput, err error) error {
+	return err
 }
 func nopPreUpdate(context.Context, *svcapitypes.DomainName, *svcsdk.UpdateDomainNameInput) error {
 	return nil
 }
-func nopPostUpdate(context.Context, *svcapitypes.DomainName, *svcsdk.UpdateDomainNameOutput, managed.ExternalUpdate, error) (managed.ExternalUpdate, error) {
-	return managed.ExternalUpdate{}, nil
+func nopPostUpdate(_ context.Context, _ *svcapitypes.DomainName, _ *svcsdk.UpdateDomainNameOutput, upd managed.ExternalUpdate, err error) (managed.ExternalUpdate, error) {
+	return upd, err
 }

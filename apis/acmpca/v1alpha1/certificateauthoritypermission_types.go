@@ -40,6 +40,7 @@ type CertificateAuthorityPermissionParameters struct {
 
 	// The Amazon Resource Name (ARN) of the private certificate authority (CA)that will be used to issue the certificate.
 	// +immutable
+	// +crossplane:generate:reference:type=CertificateAuthority
 	CertificateAuthorityARN *string `json:"certificateAuthorityARN,omitempty"`
 
 	// CertificateAuthorityARNRef references an CertificateAuthority to retrieve its Arn
@@ -57,10 +58,11 @@ type CertificateAuthorityPermissionParameters struct {
 	// +immutable
 	Actions []string `json:"actions,omitempty"`
 
-	// The AWS Service or identity
-	// +optional
+	// The AWS service or identity that receives the permission. At this
+	// time, the only valid principal is acm.amazonaws.com.
 	// +immutable
-	Principal *string `json:"principal,omitempty"`
+	// +kubebuilder:default:=acm.amazonaws.com
+	Principal string `json:"principal"`
 
 	// Calling Account ID
 	// +optional
@@ -80,7 +82,7 @@ type CertificateAuthorityPermission struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   CertificateAuthorityPermissionSpec   `json:"spec,omitempty"`
+	Spec   CertificateAuthorityPermissionSpec   `json:"spec"`
 	Status CertificateAuthorityPermissionStatus `json:"status,omitempty"`
 }
 

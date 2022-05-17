@@ -16,8 +16,20 @@ limitations under the License.
 
 package v1alpha1
 
+import xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
+
 // CustomSecretParameters contains the additional fields for SecretParameters.
 type CustomSecretParameters struct {
+	// KMSKeyIDRef is a reference to an kms/v1alpha1.Key used
+	// to set the KMSKeyID field.
+	// +optional
+	KMSKeyIDRef *xpv1.Reference `json:"kmsKeyIDRef,omitempty"`
+
+	// KMSKeyIDSelector selects references to kms/v1alpha1.Key
+	// used to set the KMSKeyID.
+	// +optional
+	KMSKeyIDSelector *xpv1.Selector `json:"kmsKeyIDSelector,omitempty"`
+
 	// StringSecretRef points to the Kubernetes Secret whose data will be sent
 	// as string to AWS. If key parameter is given, only the value of that key
 	// will be used. Otherwise, all data in the Secret will be marshalled into
@@ -52,6 +64,17 @@ type CustomSecretParameters struct {
 	//
 	// This value can range from 7 to 30 days. The default value is 30.
 	RecoveryWindowInDays *int64 `json:"recoveryWindowInDays,omitempty"`
+
+	// A JSON-formatted string constructed according to the grammar and syntax for
+	// an Amazon Web Services resource-based policy. The policy in the string identifies
+	// who can access or manage this secret and its versions. For information on
+	// how to format a JSON parameter for the various command line tool environments,
+	// see Using JSON for Parameters (http://docs.aws.amazon.com/cli/latest/userguide/cli-using-param.html#cli-using-param-json)
+	// in the CLI User Guide.
+	//
+	// ResourcePolicy is a required field
+	// +optional
+	ResourcePolicy *string `json:"resourcePolicy,omitempty"`
 }
 
 // A SecretReference is a reference to a secret in an arbitrary namespace.

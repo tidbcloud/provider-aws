@@ -18,6 +18,7 @@ package route
 
 import (
 	"context"
+	"time"
 
 	svcsdk "github.com/aws/aws-sdk-go/service/apigatewayv2"
 	"k8s.io/client-go/util/workqueue"
@@ -37,7 +38,7 @@ import (
 )
 
 // SetupRoute adds a controller that reconciles Route.
-func SetupRoute(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
+func SetupRoute(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll time.Duration) error {
 	name := managed.ControllerName(svcapitypes.RouteGroupKind)
 	opts := []option{
 		func(e *external) {
@@ -51,13 +52,14 @@ func SetupRoute(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) er
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter: ratelimiter.NewDefaultManagedRateLimiter(rl),
+			RateLimiter: ratelimiter.NewController(rl),
 		}).
 		For(&svcapitypes.Route{}).
 		Complete(managed.NewReconciler(mgr,
 			resource.ManagedKind(svcapitypes.RouteGroupVersionKind),
 			managed.WithExternalConnecter(&connector{kube: mgr.GetClient(), opts: opts}),
-			managed.WithInitializers(managed.NewDefaultProviderConfig(mgr.GetClient())),
+			managed.WithInitializers(),
+			managed.WithPollInterval(poll),
 			managed.WithLogger(l.WithValues("controller", name)),
 			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
@@ -88,12 +90,11 @@ func postCreate(_ context.Context, cr *svcapitypes.Route, res *svcsdk.CreateRout
 	// NOTE(muvaf): Route ID is chosen as external name since it's the only unique
 	// identifier.
 	meta.SetExternalName(cr, aws.StringValue(res.RouteId))
-	cre.ExternalNameAssigned = true
 	return cre, nil
 }
 
-func preDelete(_ context.Context, cr *svcapitypes.Route, obj *svcsdk.DeleteRouteInput) error {
+func preDelete(_ context.Context, cr *svcapitypes.Route, obj *svcsdk.DeleteRouteInput) (bool, error) {
 	obj.ApiId = cr.Spec.ForProvider.APIID
 	obj.RouteId = aws.String(meta.GetExternalName(cr))
-	return nil
+	return false, nil
 }

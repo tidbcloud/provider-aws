@@ -56,6 +56,12 @@ type NATGatewayParameters struct {
 	// +optional
 	SubnetIDSelector *xpv1.Selector `json:"subnetIdSelector,omitempty"`
 
+	// Indicates whether the NAT gateway supports public or private connectivity. The
+	// default is public connectivity.
+	// +optional
+	// +kubebuilder:validation:Enum=public;private
+	ConnectivityType string `json:"connectivityType,omitempty"`
+
 	// Tags represents to current ec2 tags.
 	// +optional
 	Tags []Tag `json:"tags,omitempty"`
@@ -90,7 +96,7 @@ type NATGatewayAddress struct {
 // NATGatewayStatus describes the observed state
 type NATGatewayStatus struct {
 	xpv1.ResourceStatus `json:",inline"`
-	AtProvider          NATGatewayObservation `json:"atProvider"`
+	AtProvider          NATGatewayObservation `json:"atProvider,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -106,6 +112,7 @@ type NATGatewayStatus struct {
 // +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,categories={crossplane,managed,aws}
+// +kubebuilder:storageversion
 type NATGateway struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

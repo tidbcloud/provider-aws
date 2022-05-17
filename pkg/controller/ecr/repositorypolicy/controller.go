@@ -18,6 +18,7 @@ package repositorypolicy
 
 import (
 	"context"
+	"time"
 
 	awsecr "github.com/aws/aws-sdk-go-v2/service/ecr"
 	"github.com/google/go-cmp/cmp"
@@ -34,7 +35,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 
-	"github.com/crossplane/provider-aws/apis/ecr/v1alpha1"
+	"github.com/crossplane/provider-aws/apis/ecr/v1beta1"
 	awsclient "github.com/crossplane/provider-aws/pkg/clients"
 	ecr "github.com/crossplane/provider-aws/pkg/clients/ecr"
 )
@@ -49,18 +50,19 @@ const (
 )
 
 // SetupRepositoryPolicy adds a controller that reconciles ECR.
-func SetupRepositoryPolicy(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
-	name := managed.ControllerName(v1alpha1.RepositoryPolicyGroupKind)
+func SetupRepositoryPolicy(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll time.Duration) error {
+	name := managed.ControllerName(v1beta1.RepositoryPolicyGroupKind)
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter: ratelimiter.NewDefaultManagedRateLimiter(rl),
+			RateLimiter: ratelimiter.NewController(rl),
 		}).
-		For(&v1alpha1.RepositoryPolicy{}).
+		For(&v1beta1.RepositoryPolicy{}).
 		Complete(managed.NewReconciler(mgr,
-			resource.ManagedKind(v1alpha1.RepositoryPolicyGroupVersionKind),
+			resource.ManagedKind(v1beta1.RepositoryPolicyGroupVersionKind),
 			managed.WithExternalConnecter(&connector{kube: mgr.GetClient()}),
 			managed.WithReferenceResolver(managed.NewAPISimpleReferenceResolver(mgr.GetClient())),
+			managed.WithPollInterval(poll),
 			managed.WithLogger(l.WithValues("controller", name)),
 			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
@@ -70,7 +72,7 @@ type connector struct {
 }
 
 func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.ExternalClient, error) {
-	cr, ok := mg.(*v1alpha1.RepositoryPolicy)
+	cr, ok := mg.(*v1beta1.RepositoryPolicy)
 	if !ok {
 		return nil, errors.New(errUnexpectedObject)
 	}
@@ -78,7 +80,7 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	if err != nil {
 		return nil, err
 	}
-	return &external{client: awsecr.New(*cfg), kube: c.kube}, nil
+	return &external{client: awsecr.NewFromConfig(*cfg), kube: c.kube}, nil
 }
 
 type external struct {
@@ -87,28 +89,24 @@ type external struct {
 }
 
 func (e *external) Observe(ctx context.Context, mgd resource.Managed) (managed.ExternalObservation, error) {
-	cr, ok := mgd.(*v1alpha1.RepositoryPolicy)
+	cr, ok := mgd.(*v1beta1.RepositoryPolicy)
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errUnexpectedObject)
 	}
 
-	response, err := e.client.GetRepositoryPolicyRequest(&awsecr.GetRepositoryPolicyInput{
+	response, err := e.client.GetRepositoryPolicy(ctx, &awsecr.GetRepositoryPolicyInput{
 		RegistryId:     cr.Spec.ForProvider.RegistryID,
 		RepositoryName: cr.Spec.ForProvider.RepositoryName,
-	}).Send(ctx)
+	})
 
 	if err != nil {
-		return managed.ExternalObservation{}, awsclient.Wrap(resource.Ignore(ecr.IsPolicyNotFoundErr, err), errGet)
+		return managed.ExternalObservation{}, awsclient.Wrap(resource.IgnoreAny(err, ecr.IsRepoNotFoundErr, ecr.IsPolicyNotFoundErr), errGet)
 	}
 
 	policyData, err := ecr.RawPolicyData(cr)
 
 	if err != nil {
 		return managed.ExternalObservation{}, errors.Wrap(err, errGet)
-	}
-
-	if response.PolicyText != nil {
-		cr.Status.AtProvider.PolicyText = *response.PolicyText
 	}
 
 	current := cr.Spec.ForProvider.DeepCopy()
@@ -118,13 +116,13 @@ func (e *external) Observe(ctx context.Context, mgd resource.Managed) (managed.E
 
 	return managed.ExternalObservation{
 		ResourceExists:          true,
-		ResourceUpToDate:        ecr.IsRepositoryPolicyUpToDate(&policyData, &cr.Status.AtProvider.PolicyText),
+		ResourceUpToDate:        awsclient.IsPolicyUpToDate(&policyData, response.PolicyText),
 		ResourceLateInitialized: !cmp.Equal(current, &cr.Spec.ForProvider),
 	}, nil
 }
 
 func (e *external) Create(ctx context.Context, mgd resource.Managed) (managed.ExternalCreation, error) {
-	cr, ok := mgd.(*v1alpha1.RepositoryPolicy)
+	cr, ok := mgd.(*v1beta1.RepositoryPolicy)
 	if !ok {
 		return managed.ExternalCreation{}, errors.New(errUnexpectedObject)
 	}
@@ -133,13 +131,13 @@ func (e *external) Create(ctx context.Context, mgd resource.Managed) (managed.Ex
 	if err != nil {
 		return managed.ExternalCreation{}, errors.Wrap(err, errCreate)
 	}
-	_, err = e.client.SetRepositoryPolicyRequest(ecr.GenerateSetRepositoryPolicyInput(&cr.Spec.ForProvider, &policyData)).Send(ctx)
+	_, err = e.client.SetRepositoryPolicy(ctx, ecr.GenerateSetRepositoryPolicyInput(&cr.Spec.ForProvider, &policyData))
 
 	return managed.ExternalCreation{}, awsclient.Wrap(err, errCreate)
 }
 
 func (e *external) Update(ctx context.Context, mgd resource.Managed) (managed.ExternalUpdate, error) {
-	cr, ok := mgd.(*v1alpha1.RepositoryPolicy)
+	cr, ok := mgd.(*v1beta1.RepositoryPolicy)
 	if !ok {
 		return managed.ExternalUpdate{}, errors.New(errUnexpectedObject)
 	}
@@ -148,20 +146,20 @@ func (e *external) Update(ctx context.Context, mgd resource.Managed) (managed.Ex
 	if err != nil {
 		return managed.ExternalUpdate{}, errors.Wrap(err, errUpdate)
 	}
-	_, err = e.client.SetRepositoryPolicyRequest(ecr.GenerateSetRepositoryPolicyInput(&cr.Spec.ForProvider, &policyData)).Send(ctx)
+	_, err = e.client.SetRepositoryPolicy(ctx, ecr.GenerateSetRepositoryPolicyInput(&cr.Spec.ForProvider, &policyData))
 	return managed.ExternalUpdate{}, awsclient.Wrap(err, errUpdate)
 }
 
 func (e *external) Delete(ctx context.Context, mgd resource.Managed) error {
-	cr, ok := mgd.(*v1alpha1.RepositoryPolicy)
+	cr, ok := mgd.(*v1beta1.RepositoryPolicy)
 	if !ok {
 		return errors.New(errUnexpectedObject)
 	}
 
-	_, err := e.client.DeleteRepositoryPolicyRequest(&awsecr.DeleteRepositoryPolicyInput{
+	_, err := e.client.DeleteRepositoryPolicy(ctx, &awsecr.DeleteRepositoryPolicyInput{
 		RepositoryName: cr.Spec.ForProvider.RepositoryName,
 		RegistryId:     cr.Spec.ForProvider.RegistryID,
-	}).Send(ctx)
+	})
 
 	return awsclient.Wrap(resource.Ignore(ecr.IsPolicyNotFoundErr, err), errDelete)
 }

@@ -88,12 +88,12 @@ func (e *external) Observe(ctx context.Context, mg cpresource.Managed) (managed.
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 	currentSpec := cr.Spec.ForProvider.DeepCopy()
-	if err := e.lateInitialize(cr, resp); err != nil {
+	if err := e.lateInitialize(&cr.Spec.ForProvider, resp); err != nil {
 		return managed.ExternalObservation{}, errors.Wrap(err, "late-init failed")
 	}
 	GenerateFileSystem(resp).Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
 
-	upToDate, err := e.isUpToDate(basicUpToDateCheck(cr, resp), cr, resp)
+	upToDate, err := e.isUpToDate(cr, resp)
 	if err != nil {
 		return managed.ExternalObservation{}, errors.Wrap(err, "isUpToDate check failed")
 	}
@@ -121,27 +121,58 @@ func (e *external) Create(ctx context.Context, mg cpresource.Managed) (managed.E
 
 	if resp.CreationTime != nil {
 		cr.Status.AtProvider.CreationTime = &metav1.Time{*resp.CreationTime}
+	} else {
+		cr.Status.AtProvider.CreationTime = nil
 	}
 	if resp.CreationToken != nil {
 		cr.Status.AtProvider.CreationToken = resp.CreationToken
+	} else {
+		cr.Status.AtProvider.CreationToken = nil
+	}
+	if resp.Encrypted != nil {
+		cr.Spec.ForProvider.Encrypted = resp.Encrypted
+	} else {
+		cr.Spec.ForProvider.Encrypted = nil
 	}
 	if resp.FileSystemArn != nil {
 		cr.Status.AtProvider.FileSystemARN = resp.FileSystemArn
+	} else {
+		cr.Status.AtProvider.FileSystemARN = nil
 	}
 	if resp.FileSystemId != nil {
 		cr.Status.AtProvider.FileSystemID = resp.FileSystemId
+	} else {
+		cr.Status.AtProvider.FileSystemID = nil
+	}
+	if resp.KmsKeyId != nil {
+		cr.Spec.ForProvider.KMSKeyID = resp.KmsKeyId
+	} else {
+		cr.Spec.ForProvider.KMSKeyID = nil
 	}
 	if resp.LifeCycleState != nil {
 		cr.Status.AtProvider.LifeCycleState = resp.LifeCycleState
+	} else {
+		cr.Status.AtProvider.LifeCycleState = nil
 	}
 	if resp.Name != nil {
 		cr.Status.AtProvider.Name = resp.Name
+	} else {
+		cr.Status.AtProvider.Name = nil
 	}
 	if resp.NumberOfMountTargets != nil {
 		cr.Status.AtProvider.NumberOfMountTargets = resp.NumberOfMountTargets
+	} else {
+		cr.Status.AtProvider.NumberOfMountTargets = nil
 	}
 	if resp.OwnerId != nil {
 		cr.Status.AtProvider.OwnerID = resp.OwnerId
+	} else {
+		cr.Status.AtProvider.OwnerID = nil
+	}
+	if resp.PerformanceMode != nil {
+		cr.Spec.ForProvider.PerformanceMode = resp.PerformanceMode
+	} else {
+		cr.Spec.ForProvider.PerformanceMode = nil
 	}
 	if resp.SizeInBytes != nil {
 		f11 := &svcapitypes.FileSystemSize{}
@@ -158,6 +189,29 @@ func (e *external) Create(ctx context.Context, mg cpresource.Managed) (managed.E
 			f11.ValueInStandard = resp.SizeInBytes.ValueInStandard
 		}
 		cr.Status.AtProvider.SizeInBytes = f11
+	} else {
+		cr.Status.AtProvider.SizeInBytes = nil
+	}
+	if resp.Tags != nil {
+		f12 := []*svcapitypes.Tag{}
+		for _, f12iter := range resp.Tags {
+			f12elem := &svcapitypes.Tag{}
+			if f12iter.Key != nil {
+				f12elem.Key = f12iter.Key
+			}
+			if f12iter.Value != nil {
+				f12elem.Value = f12iter.Value
+			}
+			f12 = append(f12, f12elem)
+		}
+		cr.Spec.ForProvider.Tags = f12
+	} else {
+		cr.Spec.ForProvider.Tags = nil
+	}
+	if resp.ThroughputMode != nil {
+		cr.Spec.ForProvider.ThroughputMode = resp.ThroughputMode
+	} else {
+		cr.Spec.ForProvider.ThroughputMode = nil
 	}
 
 	return e.postCreate(ctx, cr, resp, managed.ExternalCreation{}, err)
@@ -173,10 +227,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 		return managed.ExternalUpdate{}, errors.Wrap(err, "pre-update failed")
 	}
 	resp, err := e.client.UpdateFileSystemWithContext(ctx, input)
-	if err != nil {
-		return managed.ExternalUpdate{}, awsclient.Wrap(err, errUpdate)
-	}
-	return e.postUpdate(ctx, cr, resp, managed.ExternalUpdate{}, err)
+	return e.postUpdate(ctx, cr, resp, managed.ExternalUpdate{}, awsclient.Wrap(err, errUpdate))
 }
 
 func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error {
@@ -205,8 +256,8 @@ func newExternal(kube client.Client, client svcsdkapi.EFSAPI, opts []option) *ex
 		client:         client,
 		preObserve:     nopPreObserve,
 		postObserve:    nopPostObserve,
-		lateInitialize: lateInitialize,
-		isUpToDate:     nopIsUpToDate,
+		lateInitialize: nopLateInitialize,
+		isUpToDate:     alwaysUpToDate,
 		filterList:     nopFilterList,
 		preCreate:      nopPreCreate,
 		postCreate:     nopPostCreate,
@@ -227,8 +278,8 @@ type external struct {
 	preObserve     func(context.Context, *svcapitypes.FileSystem, *svcsdk.DescribeFileSystemsInput) error
 	postObserve    func(context.Context, *svcapitypes.FileSystem, *svcsdk.DescribeFileSystemsOutput, managed.ExternalObservation, error) (managed.ExternalObservation, error)
 	filterList     func(*svcapitypes.FileSystem, *svcsdk.DescribeFileSystemsOutput) *svcsdk.DescribeFileSystemsOutput
-	lateInitialize func(*svcapitypes.FileSystem, *svcsdk.DescribeFileSystemsOutput) error
-	isUpToDate     func(bool, *svcapitypes.FileSystem, *svcsdk.DescribeFileSystemsOutput) (bool, error)
+	lateInitialize func(*svcapitypes.FileSystemParameters, *svcsdk.DescribeFileSystemsOutput) error
+	isUpToDate     func(*svcapitypes.FileSystem, *svcsdk.DescribeFileSystemsOutput) (bool, error)
 	preCreate      func(context.Context, *svcapitypes.FileSystem, *svcsdk.CreateFileSystemInput) error
 	postCreate     func(context.Context, *svcapitypes.FileSystem, *svcsdk.FileSystemDescription, managed.ExternalCreation, error) (managed.ExternalCreation, error)
 	preDelete      func(context.Context, *svcapitypes.FileSystem, *svcsdk.DeleteFileSystemInput) (bool, error)
@@ -247,8 +298,11 @@ func nopFilterList(_ *svcapitypes.FileSystem, list *svcsdk.DescribeFileSystemsOu
 	return list
 }
 
-func nopIsUpToDate(r bool, _ *svcapitypes.FileSystem, _ *svcsdk.DescribeFileSystemsOutput) (bool, error) {
-	return r, nil
+func nopLateInitialize(*svcapitypes.FileSystemParameters, *svcsdk.DescribeFileSystemsOutput) error {
+	return nil
+}
+func alwaysUpToDate(*svcapitypes.FileSystem, *svcsdk.DescribeFileSystemsOutput) (bool, error) {
+	return true, nil
 }
 
 func nopPreCreate(context.Context, *svcapitypes.FileSystem, *svcsdk.CreateFileSystemInput) error {

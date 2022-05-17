@@ -2,6 +2,7 @@ package function
 
 import (
 	"context"
+	"time"
 
 	svcsdk "github.com/aws/aws-sdk-go/service/lambda"
 	svcsdkapi "github.com/aws/aws-sdk-go/service/lambda/lambdaiface"
@@ -26,7 +27,7 @@ import (
 )
 
 // SetupFunction adds a controller that reconciles Function.
-func SetupFunction(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter) error {
+func SetupFunction(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll time.Duration) error {
 	name := managed.ControllerName(v1alpha1.FunctionGroupKind)
 	opts := []option{
 		func(e *external) {
@@ -43,12 +44,13 @@ func SetupFunction(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter)
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(controller.Options{
-			RateLimiter: ratelimiter.NewDefaultManagedRateLimiter(rl),
+			RateLimiter: ratelimiter.NewController(rl),
 		}).
 		For(&v1alpha1.Function{}).
 		Complete(managed.NewReconciler(mgr,
 			resource.ManagedKind(v1alpha1.FunctionGroupVersionKind),
 			managed.WithExternalConnecter(&connector{kube: mgr.GetClient(), opts: opts}),
+			managed.WithPollInterval(poll),
 			managed.WithLogger(l.WithValues("controller", name)),
 			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
@@ -66,6 +68,20 @@ func LateInitialize(cr *svcapitypes.FunctionParameters, resp *svcsdk.GetFunction
 
 func preCreate(_ context.Context, cr *svcapitypes.Function, obj *svcsdk.CreateFunctionInput) error {
 	obj.FunctionName = aws.String(meta.GetExternalName(cr))
+	obj.Role = cr.Spec.ForProvider.Role
+	obj.Code = &svcsdk.FunctionCode{
+		ImageUri:        cr.Spec.ForProvider.CustomFunctionCodeParameters.ImageURI,
+		S3Bucket:        cr.Spec.ForProvider.CustomFunctionCodeParameters.S3Bucket,
+		S3Key:           cr.Spec.ForProvider.CustomFunctionCodeParameters.S3Key,
+		S3ObjectVersion: cr.Spec.ForProvider.CustomFunctionCodeParameters.S3ObjectVersion,
+	}
+	if cr.Spec.ForProvider.CustomFunctionVPCConfigParameters != nil {
+		obj.VpcConfig = &svcsdk.VpcConfig{
+			SecurityGroupIds: cr.Spec.ForProvider.CustomFunctionVPCConfigParameters.SecurityGroupIDs,
+			SubnetIds:        cr.Spec.ForProvider.CustomFunctionVPCConfigParameters.SubnetIDs,
+		}
+	}
+	obj.Layers = cr.Spec.ForProvider.Layers
 	return nil
 }
 
@@ -159,7 +175,7 @@ func isUpToDate(cr *svcapitypes.Function, obj *svcsdk.GetFunctionOutput) (bool, 
 		return false, nil
 	}
 
-	addTags, removeTags := diffTags(cr.Spec.ForProvider.Tags, obj.Tags)
+	addTags, removeTags := aws.DiffTagsMapPtr(cr.Spec.ForProvider.Tags, obj.Tags)
 	return len(addTags) == 0 && len(removeTags) == 0, nil
 
 }
@@ -230,9 +246,9 @@ func isUpToDateSecurityGroupIDs(cr *svcapitypes.Function, obj *svcsdk.GetFunctio
 	// Handle nil pointer refs
 	var securityGroupIDs []*string
 	var awsSecurityGroupIDs []*string
-	if cr.Spec.ForProvider.VPCConfig != nil &&
-		cr.Spec.ForProvider.VPCConfig.SecurityGroupIDs != nil {
-		securityGroupIDs = cr.Spec.ForProvider.VPCConfig.SecurityGroupIDs
+	if cr.Spec.ForProvider.CustomFunctionVPCConfigParameters != nil &&
+		cr.Spec.ForProvider.CustomFunctionVPCConfigParameters.SecurityGroupIDs != nil {
+		securityGroupIDs = cr.Spec.ForProvider.CustomFunctionVPCConfigParameters.SecurityGroupIDs
 	}
 	if obj.Configuration.VpcConfig != nil &&
 		obj.Configuration.VpcConfig.SecurityGroupIds != nil {
@@ -245,25 +261,6 @@ func isUpToDateSecurityGroupIDs(cr *svcapitypes.Function, obj *svcsdk.GetFunctio
 	})
 
 	return cmp.Equal(securityGroupIDs, awsSecurityGroupIDs, sortCmp, cmpopts.EquateEmpty())
-}
-
-// returns which AWS Tags exist in the resource tags and which are outdated and should be removed
-func diffTags(spec map[string]*string, current map[string]*string) (map[string]*string, []*string) {
-	addMap := make(map[string]*string, len(spec))
-	removeTags := make([]*string, 0)
-	for k, v := range current {
-		if aws.StringValue(spec[k]) == aws.StringValue(v) {
-			continue
-		}
-		removeTags = append(removeTags, aws.String(k))
-	}
-	for k, v := range spec {
-		if aws.StringValue(current[k]) == aws.StringValue(v) {
-			continue
-		}
-		addMap[k] = v
-	}
-	return addMap, removeTags
 }
 
 type updater struct {
@@ -303,7 +300,7 @@ func (u *updater) update(ctx context.Context, mg resource.Managed) (managed.Exte
 		return managed.ExternalUpdate{}, aws.Wrap(err, errUpdate)
 	}
 
-	addTags, removeTags := diffTags(cr.Spec.ForProvider.Tags, tags.Tags)
+	addTags, removeTags := aws.DiffTagsMapPtr(cr.Spec.ForProvider.Tags, tags.Tags)
 	// Remove old tags before adding new tags in case values change for keys
 	if len(removeTags) > 0 {
 		if _, err := u.client.UntagResourceWithContext(ctx, &svcsdk.UntagResourceInput{
@@ -337,22 +334,17 @@ func (u *updater) update(ctx context.Context, mg resource.Managed) (managed.Exte
 func GenerateUpdateFunctionCodeInput(cr *svcapitypes.Function) *svcsdk.UpdateFunctionCodeInput {
 	f0 := &svcsdk.UpdateFunctionCodeInput{}
 	f0.SetFunctionName(cr.Name)
-	if cr.Spec.ForProvider.Code != nil {
-		if cr.Spec.ForProvider.Code.ImageURI != nil {
-			f0.SetImageUri(*cr.Spec.ForProvider.Code.ImageURI)
-		}
-		if cr.Spec.ForProvider.Code.S3Bucket != nil {
-			f0.SetS3Bucket(*cr.Spec.ForProvider.Code.S3Bucket)
-		}
-		if cr.Spec.ForProvider.Code.S3Key != nil {
-			f0.SetS3Key(*cr.Spec.ForProvider.Code.S3Key)
-		}
-		if cr.Spec.ForProvider.Code.S3ObjectVersion != nil {
-			f0.SetS3ObjectVersion(*cr.Spec.ForProvider.Code.S3ObjectVersion)
-		}
-		if cr.Spec.ForProvider.Code.ZipFile != nil {
-			f0.SetZipFile(cr.Spec.ForProvider.Code.ZipFile)
-		}
+	if cr.Spec.ForProvider.CustomFunctionCodeParameters.ImageURI != nil {
+		f0.SetImageUri(*cr.Spec.ForProvider.CustomFunctionCodeParameters.ImageURI)
+	}
+	if cr.Spec.ForProvider.CustomFunctionCodeParameters.S3Bucket != nil {
+		f0.SetS3Bucket(*cr.Spec.ForProvider.CustomFunctionCodeParameters.S3Bucket)
+	}
+	if cr.Spec.ForProvider.CustomFunctionCodeParameters.S3Key != nil {
+		f0.SetS3Key(*cr.Spec.ForProvider.CustomFunctionCodeParameters.S3Key)
+	}
+	if cr.Spec.ForProvider.CustomFunctionCodeParameters.S3ObjectVersion != nil {
+		f0.SetS3ObjectVersion(*cr.Spec.ForProvider.CustomFunctionCodeParameters.S3ObjectVersion)
 	}
 	return f0
 }
@@ -456,19 +448,19 @@ func GenerateUpdateFunctionConfigurationInput(cr *svcapitypes.Function) *svcsdk.
 		}
 		res.SetTracingConfig(f18)
 	}
-	if cr.Spec.ForProvider.VPCConfig != nil {
+	if cr.Spec.ForProvider.CustomFunctionVPCConfigParameters != nil {
 		f19 := &svcsdk.VpcConfig{}
-		if cr.Spec.ForProvider.VPCConfig.SecurityGroupIDs != nil {
+		if cr.Spec.ForProvider.CustomFunctionVPCConfigParameters.SecurityGroupIDs != nil {
 			f19f0 := []*string{}
-			for _, f19f0iter := range cr.Spec.ForProvider.VPCConfig.SecurityGroupIDs {
+			for _, f19f0iter := range cr.Spec.ForProvider.CustomFunctionVPCConfigParameters.SecurityGroupIDs {
 				var f19f0elem = *f19f0iter
 				f19f0 = append(f19f0, &f19f0elem)
 			}
 			f19.SetSecurityGroupIds(f19f0)
 		}
-		if cr.Spec.ForProvider.VPCConfig.SubnetIDs != nil {
+		if cr.Spec.ForProvider.CustomFunctionVPCConfigParameters.SubnetIDs != nil {
 			f19f1 := []*string{}
-			for _, f19f1iter := range cr.Spec.ForProvider.VPCConfig.SubnetIDs {
+			for _, f19f1iter := range cr.Spec.ForProvider.CustomFunctionVPCConfigParameters.SubnetIDs {
 				var f19f1elem = *f19f1iter
 				f19f1 = append(f19f1, &f19f1elem)
 			}

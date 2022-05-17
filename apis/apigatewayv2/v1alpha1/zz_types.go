@@ -22,6 +22,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Hack to avoid import errors during build...
+var (
+	_ = &metav1.Time{}
+)
+
+// +kubebuilder:skipversion
 type APIMapping_SDK struct {
 	// The identifier.
 	APIID *string `json:"apiID,omitempty"`
@@ -37,6 +43,7 @@ type APIMapping_SDK struct {
 	Stage *string `json:"stage,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type API_SDK struct {
 	APIEndpoint *string `json:"apiEndpoint,omitempty"`
 
@@ -50,7 +57,7 @@ type API_SDK struct {
 	// Represents a CORS configuration. Supported only for HTTP APIs. See Configuring
 	// CORS (https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-cors.html)
 	// for more information.
-	CorsConfiguration *Cors `json:"corsConfiguration,omitempty"`
+	CORSConfiguration *CORS `json:"corsConfiguration,omitempty"`
 
 	CreatedDate *metav1.Time `json:"createdDate,omitempty"`
 	// A string with a length between [0-1024].
@@ -77,6 +84,7 @@ type API_SDK struct {
 	Warnings []*string `json:"warnings,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type AccessLogSettings struct {
 	// Represents an Amazon Resource Name (ARN).
 	DestinationARN *string `json:"destinationARN,omitempty"`
@@ -84,6 +92,7 @@ type AccessLogSettings struct {
 	Format *string `json:"format,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type Authorizer_SDK struct {
 	// Represents an Amazon Resource Name (ARN).
 	AuthorizerCredentialsARN *string `json:"authorizerCredentialsARN,omitempty"`
@@ -114,9 +123,9 @@ type Authorizer_SDK struct {
 	// response without calling the Lambda function. The valid value is a string
 	// of comma-separated mapping expressions of the specified request parameters.
 	// When the authorization caching is not enabled, this property is optional.
-	IDentitySource []*string `json:"identitySource,omitempty"`
+	IdentitySource []*string `json:"identitySource,omitempty"`
 	// A string with a length between [0-1024].
-	IDentityValidationExpression *string `json:"identityValidationExpression,omitempty"`
+	IdentityValidationExpression *string `json:"identityValidationExpression,omitempty"`
 	// Represents the configuration of a JWT authorizer. Required for the JWT authorizer
 	// type. Supported only for HTTP APIs.
 	JWTConfiguration *JWTConfiguration `json:"jwtConfiguration,omitempty"`
@@ -124,7 +133,8 @@ type Authorizer_SDK struct {
 	Name *string `json:"name,omitempty"`
 }
 
-type Cors struct {
+// +kubebuilder:skipversion
+type CORS struct {
 	AllowCredentials *bool `json:"allowCredentials,omitempty"`
 	// Represents a collection of allowed headers. Supported only for HTTP APIs.
 	AllowHeaders []*string `json:"allowHeaders,omitempty"`
@@ -138,6 +148,7 @@ type Cors struct {
 	MaxAge *int64 `json:"maxAge,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type Deployment_SDK struct {
 	AutoDeployed *bool `json:"autoDeployed,omitempty"`
 
@@ -152,6 +163,7 @@ type Deployment_SDK struct {
 	Description *string `json:"description,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type DomainNameConfiguration struct {
 	APIGatewayDomainName *string `json:"apiGatewayDomainName,omitempty"`
 	// Represents an Amazon Resource Name (ARN).
@@ -176,6 +188,7 @@ type DomainNameConfiguration struct {
 	SecurityPolicy *string `json:"securityPolicy,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type DomainName_SDK struct {
 	// An expression used to extract information at runtime. See Selection Expressions
 	// (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions)
@@ -193,6 +206,7 @@ type DomainName_SDK struct {
 	Tags map[string]*string `json:"tags,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type IntegrationResponse_SDK struct {
 	// Specifies how to handle response payload content type conversions. Supported
 	// only for WebSocket APIs.
@@ -205,16 +219,28 @@ type IntegrationResponse_SDK struct {
 	// for a list of expressions and each expression's associated selection key
 	// type.
 	IntegrationResponseKey *string `json:"integrationResponseKey,omitempty"`
-	// A key-value map specifying response parameters that are passed to the method
-	// response from the backend. The key is a method response header parameter
-	// name and the mapped value is an integration response header value, a static
-	// value enclosed within a pair of single quotes, or a JSON expression from
-	// the integration response body. The mapping key must match the pattern of
-	// method.response.header.{name}, where name is a valid and unique header name.
-	// The mapped non-static value must match the pattern of integration.response.header.{name}
-	// or integration.response.body.{JSON-expression}, where name is a valid and
-	// unique response header name and JSON-expression is a valid JSON expression
-	// without the $ prefix.
+	// For WebSocket APIs, a key-value map specifying request parameters that are
+	// passed from the method request to the backend. The key is an integration
+	// request parameter name and the associated value is a method request parameter
+	// value or static value that must be enclosed within single quotes and pre-encoded
+	// as required by the backend. The method request parameter value must match
+	// the pattern of method.request.{location}.{name} , where {location} is querystring,
+	// path, or header; and {name} must be a valid and unique method request parameter
+	// name.
+	//
+	// For HTTP API integrations with a specified integrationSubtype, request parameters
+	// are a key-value map specifying parameters that are passed to AWS_PROXY integrations.
+	// You can provide static values, or map request data, stage variables, or context
+	// variables that are evaluated at runtime. To learn more, see Working with
+	// AWS service integrations for HTTP APIs (https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-develop-integrations-aws-services.html).
+	//
+	// For HTTP API integrations without a specified integrationSubtype request
+	// parameters are a key-value map specifying how to transform HTTP requests
+	// before sending them to the backend. The key should follow the pattern <action>:<header|querystring|path>.<location>
+	// where action can be append, overwrite or remove. For values, you can provide
+	// static values, or map request data, stage variables, or context variables
+	// that are evaluated at runtime. To learn more, see Transforming API requests
+	// and responses (https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-parameter-mapping.html).
 	ResponseParameters map[string]*string `json:"responseParameters,omitempty"`
 	// A mapping of identifier keys to templates. The value is an actual template
 	// script. The key is typically a SelectionKey which is chosen based on evaluating
@@ -226,6 +252,7 @@ type IntegrationResponse_SDK struct {
 	TemplateSelectionExpression *string `json:"templateSelectionExpression,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type Integration_SDK struct {
 	APIGatewayManaged *bool `json:"apiGatewayManaged,omitempty"`
 	// A string with a length between [1-1024].
@@ -258,21 +285,37 @@ type Integration_SDK struct {
 	PassthroughBehavior *string `json:"passthroughBehavior,omitempty"`
 	// A string with a length between [1-64].
 	PayloadFormatVersion *string `json:"payloadFormatVersion,omitempty"`
-	// A key-value map specifying response parameters that are passed to the method
-	// response from the backend. The key is a method response header parameter
-	// name and the mapped value is an integration response header value, a static
-	// value enclosed within a pair of single quotes, or a JSON expression from
-	// the integration response body. The mapping key must match the pattern of
-	// method.response.header.{name}, where name is a valid and unique header name.
-	// The mapped non-static value must match the pattern of integration.response.header.{name}
-	// or integration.response.body.{JSON-expression}, where name is a valid and
-	// unique response header name and JSON-expression is a valid JSON expression
-	// without the $ prefix.
+	// For WebSocket APIs, a key-value map specifying request parameters that are
+	// passed from the method request to the backend. The key is an integration
+	// request parameter name and the associated value is a method request parameter
+	// value or static value that must be enclosed within single quotes and pre-encoded
+	// as required by the backend. The method request parameter value must match
+	// the pattern of method.request.{location}.{name} , where {location} is querystring,
+	// path, or header; and {name} must be a valid and unique method request parameter
+	// name.
+	//
+	// For HTTP API integrations with a specified integrationSubtype, request parameters
+	// are a key-value map specifying parameters that are passed to AWS_PROXY integrations.
+	// You can provide static values, or map request data, stage variables, or context
+	// variables that are evaluated at runtime. To learn more, see Working with
+	// AWS service integrations for HTTP APIs (https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-develop-integrations-aws-services.html).
+	//
+	// For HTTP API integrations without a specified integrationSubtype request
+	// parameters are a key-value map specifying how to transform HTTP requests
+	// before sending them to the backend. The key should follow the pattern <action>:<header|querystring|path>.<location>
+	// where action can be append, overwrite or remove. For values, you can provide
+	// static values, or map request data, stage variables, or context variables
+	// that are evaluated at runtime. To learn more, see Transforming API requests
+	// and responses (https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-parameter-mapping.html).
 	RequestParameters map[string]*string `json:"requestParameters,omitempty"`
 	// A mapping of identifier keys to templates. The value is an actual template
 	// script. The key is typically a SelectionKey which is chosen based on evaluating
 	// a selection expression.
 	RequestTemplates map[string]*string `json:"requestTemplates,omitempty"`
+	// Supported only for HTTP APIs. You use response parameters to transform the
+	// HTTP response from a backend integration before returning the response to
+	// clients.
+	ResponseParameters map[string]map[string]*string `json:"responseParameters,omitempty"`
 	// An expression used to extract information at runtime. See Selection Expressions
 	// (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions)
 	// for more information.
@@ -285,12 +328,14 @@ type Integration_SDK struct {
 	TLSConfig *TLSConfig `json:"tlsConfig,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type JWTConfiguration struct {
 	Audience []*string `json:"audience,omitempty"`
 	// A string representation of a URI with a length between [1-2048].
 	Issuer *string `json:"issuer,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type Model_SDK struct {
 	// A string with a length between [1-256].
 	ContentType *string `json:"contentType,omitempty"`
@@ -304,6 +349,7 @@ type Model_SDK struct {
 	Schema *string `json:"schema,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type MutualTLSAuthentication struct {
 	// A string representation of a URI with a length between [1-2048].
 	TruststoreURI *string `json:"truststoreURI,omitempty"`
@@ -313,6 +359,7 @@ type MutualTLSAuthentication struct {
 	TruststoreWarnings []*string `json:"truststoreWarnings,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type MutualTLSAuthenticationInput struct {
 	// A string representation of a URI with a length between [1-2048].
 	TruststoreURI *string `json:"truststoreURI,omitempty"`
@@ -320,10 +367,12 @@ type MutualTLSAuthenticationInput struct {
 	TruststoreVersion *string `json:"truststoreVersion,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type ParameterConstraints struct {
 	Required *bool `json:"required,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type RouteResponse_SDK struct {
 	// An expression used to extract information at runtime. See Selection Expressions
 	// (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions)
@@ -332,7 +381,7 @@ type RouteResponse_SDK struct {
 	// The route models.
 	ResponseModels map[string]*string `json:"responseModels,omitempty"`
 	// The route parameters.
-	ResponseParameters []map[string]*ParameterConstraints `json:"responseParameters,omitempty"`
+	ResponseParameters map[string]*ParameterConstraints `json:"responseParameters,omitempty"`
 	// The identifier.
 	RouteResponseID *string `json:"routeResponseID,omitempty"`
 	// After evaluating a selection expression, the result is compared against one
@@ -343,6 +392,7 @@ type RouteResponse_SDK struct {
 	RouteResponseKey *string `json:"routeResponseKey,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type RouteSettings struct {
 	DataTraceEnabled *bool `json:"dataTraceEnabled,omitempty"`
 
@@ -355,6 +405,7 @@ type RouteSettings struct {
 	ThrottlingRateLimit *float64 `json:"throttlingRateLimit,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type Route_SDK struct {
 	APIGatewayManaged *bool `json:"apiGatewayManaged,omitempty"`
 
@@ -384,7 +435,7 @@ type Route_SDK struct {
 	// The route models.
 	RequestModels map[string]*string `json:"requestModels,omitempty"`
 	// The route parameters.
-	RequestParameters []map[string]*ParameterConstraints `json:"requestParameters,omitempty"`
+	RequestParameters map[string]*ParameterConstraints `json:"requestParameters,omitempty"`
 	// The identifier.
 	RouteID *string `json:"routeID,omitempty"`
 	// After evaluating a selection expression, the result is compared against one
@@ -401,6 +452,7 @@ type Route_SDK struct {
 	Target *string `json:"target,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type Stage_SDK struct {
 	// Settings for logging access in a stage.
 	AccessLogSettings *AccessLogSettings `json:"accessLogSettings,omitempty"`
@@ -423,7 +475,7 @@ type Stage_SDK struct {
 
 	LastUpdatedDate *metav1.Time `json:"lastUpdatedDate,omitempty"`
 	// The route settings map.
-	RouteSettings []map[string]*RouteSettings `json:"routeSettings,omitempty"`
+	RouteSettings map[string]*RouteSettings `json:"routeSettings,omitempty"`
 	// A string with a length between [1-128].
 	StageName *string `json:"stageName,omitempty"`
 	// The stage variable map.
@@ -432,16 +484,19 @@ type Stage_SDK struct {
 	Tags map[string]*string `json:"tags,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type TLSConfig struct {
 	// A string with a length between [1-512].
 	ServerNameToVerify *string `json:"serverNameToVerify,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type TLSConfigInput struct {
 	// A string with a length between [1-512].
 	ServerNameToVerify *string `json:"serverNameToVerify,omitempty"`
 }
 
+// +kubebuilder:skipversion
 type VPCLink_SDK struct {
 	CreatedDate *metav1.Time `json:"createdDate,omitempty"`
 	// A string with a length between [1-128].

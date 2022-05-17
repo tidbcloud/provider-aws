@@ -114,8 +114,44 @@ func (e *external) Create(ctx context.Context, mg cpresource.Managed) (managed.E
 		return managed.ExternalCreation{}, awsclient.Wrap(err, errCreate)
 	}
 
+	if resp.ModelSelectionExpression != nil {
+		cr.Spec.ForProvider.ModelSelectionExpression = resp.ModelSelectionExpression
+	} else {
+		cr.Spec.ForProvider.ModelSelectionExpression = nil
+	}
+	if resp.ResponseModels != nil {
+		f1 := map[string]*string{}
+		for f1key, f1valiter := range resp.ResponseModels {
+			var f1val string
+			f1val = *f1valiter
+			f1[f1key] = &f1val
+		}
+		cr.Spec.ForProvider.ResponseModels = f1
+	} else {
+		cr.Spec.ForProvider.ResponseModels = nil
+	}
+	if resp.ResponseParameters != nil {
+		f2 := map[string]*svcapitypes.ParameterConstraints{}
+		for f2key, f2valiter := range resp.ResponseParameters {
+			f2val := &svcapitypes.ParameterConstraints{}
+			if f2valiter.Required != nil {
+				f2val.Required = f2valiter.Required
+			}
+			f2[f2key] = f2val
+		}
+		cr.Spec.ForProvider.ResponseParameters = f2
+	} else {
+		cr.Spec.ForProvider.ResponseParameters = nil
+	}
 	if resp.RouteResponseId != nil {
 		cr.Status.AtProvider.RouteResponseID = resp.RouteResponseId
+	} else {
+		cr.Status.AtProvider.RouteResponseID = nil
+	}
+	if resp.RouteResponseKey != nil {
+		cr.Spec.ForProvider.RouteResponseKey = resp.RouteResponseKey
+	} else {
+		cr.Spec.ForProvider.RouteResponseKey = nil
 	}
 
 	return e.postCreate(ctx, cr, resp, managed.ExternalCreation{}, err)
@@ -131,10 +167,7 @@ func (e *external) Update(ctx context.Context, mg cpresource.Managed) (managed.E
 		return managed.ExternalUpdate{}, errors.Wrap(err, "pre-update failed")
 	}
 	resp, err := e.client.UpdateRouteResponseWithContext(ctx, input)
-	if err != nil {
-		return managed.ExternalUpdate{}, awsclient.Wrap(err, errUpdate)
-	}
-	return e.postUpdate(ctx, cr, resp, managed.ExternalUpdate{}, err)
+	return e.postUpdate(ctx, cr, resp, managed.ExternalUpdate{}, awsclient.Wrap(err, errUpdate))
 }
 
 func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error {
@@ -144,11 +177,15 @@ func (e *external) Delete(ctx context.Context, mg cpresource.Managed) error {
 	}
 	cr.Status.SetConditions(xpv1.Deleting())
 	input := GenerateDeleteRouteResponseInput(cr)
-	if err := e.preDelete(ctx, cr, input); err != nil {
+	ignore, err := e.preDelete(ctx, cr, input)
+	if err != nil {
 		return errors.Wrap(err, "pre-delete failed")
 	}
-	_, err := e.client.DeleteRouteResponseWithContext(ctx, input)
-	return awsclient.Wrap(cpresource.Ignore(IsNotFound, err), errDelete)
+	if ignore {
+		return nil
+	}
+	resp, err := e.client.DeleteRouteResponseWithContext(ctx, input)
+	return e.postDelete(ctx, cr, resp, awsclient.Wrap(cpresource.Ignore(IsNotFound, err), errDelete))
 }
 
 type option func(*external)
@@ -164,6 +201,7 @@ func newExternal(kube client.Client, client svcsdkapi.ApiGatewayV2API, opts []op
 		preCreate:      nopPreCreate,
 		postCreate:     nopPostCreate,
 		preDelete:      nopPreDelete,
+		postDelete:     nopPostDelete,
 		preUpdate:      nopPreUpdate,
 		postUpdate:     nopPostUpdate,
 	}
@@ -182,7 +220,8 @@ type external struct {
 	isUpToDate     func(*svcapitypes.RouteResponse, *svcsdk.GetRouteResponseOutput) (bool, error)
 	preCreate      func(context.Context, *svcapitypes.RouteResponse, *svcsdk.CreateRouteResponseInput) error
 	postCreate     func(context.Context, *svcapitypes.RouteResponse, *svcsdk.CreateRouteResponseOutput, managed.ExternalCreation, error) (managed.ExternalCreation, error)
-	preDelete      func(context.Context, *svcapitypes.RouteResponse, *svcsdk.DeleteRouteResponseInput) error
+	preDelete      func(context.Context, *svcapitypes.RouteResponse, *svcsdk.DeleteRouteResponseInput) (bool, error)
+	postDelete     func(context.Context, *svcapitypes.RouteResponse, *svcsdk.DeleteRouteResponseOutput, error) error
 	preUpdate      func(context.Context, *svcapitypes.RouteResponse, *svcsdk.UpdateRouteResponseInput) error
 	postUpdate     func(context.Context, *svcapitypes.RouteResponse, *svcsdk.UpdateRouteResponseOutput, managed.ExternalUpdate, error) (managed.ExternalUpdate, error)
 }
@@ -190,8 +229,9 @@ type external struct {
 func nopPreObserve(context.Context, *svcapitypes.RouteResponse, *svcsdk.GetRouteResponseInput) error {
 	return nil
 }
-func nopPostObserve(context.Context, *svcapitypes.RouteResponse, *svcsdk.GetRouteResponseOutput, managed.ExternalObservation, error) (managed.ExternalObservation, error) {
-	return managed.ExternalObservation{}, nil
+
+func nopPostObserve(_ context.Context, _ *svcapitypes.RouteResponse, _ *svcsdk.GetRouteResponseOutput, obs managed.ExternalObservation, err error) (managed.ExternalObservation, error) {
+	return obs, err
 }
 func nopLateInitialize(*svcapitypes.RouteResponseParameters, *svcsdk.GetRouteResponseOutput) error {
 	return nil
@@ -203,15 +243,18 @@ func alwaysUpToDate(*svcapitypes.RouteResponse, *svcsdk.GetRouteResponseOutput) 
 func nopPreCreate(context.Context, *svcapitypes.RouteResponse, *svcsdk.CreateRouteResponseInput) error {
 	return nil
 }
-func nopPostCreate(context.Context, *svcapitypes.RouteResponse, *svcsdk.CreateRouteResponseOutput, managed.ExternalCreation, error) (managed.ExternalCreation, error) {
-	return managed.ExternalCreation{}, nil
+func nopPostCreate(_ context.Context, _ *svcapitypes.RouteResponse, _ *svcsdk.CreateRouteResponseOutput, cre managed.ExternalCreation, err error) (managed.ExternalCreation, error) {
+	return cre, err
 }
-func nopPreDelete(context.Context, *svcapitypes.RouteResponse, *svcsdk.DeleteRouteResponseInput) error {
-	return nil
+func nopPreDelete(context.Context, *svcapitypes.RouteResponse, *svcsdk.DeleteRouteResponseInput) (bool, error) {
+	return false, nil
+}
+func nopPostDelete(_ context.Context, _ *svcapitypes.RouteResponse, _ *svcsdk.DeleteRouteResponseOutput, err error) error {
+	return err
 }
 func nopPreUpdate(context.Context, *svcapitypes.RouteResponse, *svcsdk.UpdateRouteResponseInput) error {
 	return nil
 }
-func nopPostUpdate(context.Context, *svcapitypes.RouteResponse, *svcsdk.UpdateRouteResponseOutput, managed.ExternalUpdate, error) (managed.ExternalUpdate, error) {
-	return managed.ExternalUpdate{}, nil
+func nopPostUpdate(_ context.Context, _ *svcapitypes.RouteResponse, _ *svcsdk.UpdateRouteResponseOutput, upd managed.ExternalUpdate, err error) (managed.ExternalUpdate, error) {
+	return upd, err
 }
