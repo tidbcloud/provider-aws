@@ -31,11 +31,14 @@ import (
 
 	"github.com/crossplane/provider-aws/pkg/controller/config"
 	"github.com/crossplane/provider-aws/pkg/controller/ec2/vpc"
+	"github.com/crossplane/provider-aws/pkg/controller/ec2/vpcendpoint"
+	"github.com/crossplane/provider-aws/pkg/controller/ec2/vpcendpointserviceconfiguration"
 	"github.com/crossplane/provider-aws/pkg/controller/eks"
 	"github.com/crossplane/provider-aws/pkg/controller/eks/nodegroup"
 	"github.com/crossplane/provider-aws/pkg/controller/elasticloadbalancing/elb"
 	"github.com/crossplane/provider-aws/pkg/controller/elasticloadbalancing/elbattachment"
 	"github.com/crossplane/provider-aws/pkg/controller/kms/key"
+	"github.com/crossplane/provider-aws/pkg/controller/lambda/function"
 	"github.com/crossplane/provider-aws/pkg/controller/route53/hostedzone"
 	"github.com/crossplane/provider-aws/pkg/controller/route53/resourcerecordset"
 	"github.com/crossplane/provider-aws/pkg/controller/s3"
@@ -61,6 +64,9 @@ func Setup(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll ti
 		policy.SetupPolicy,
 		role.SetupRole,
 		rolepolicyattachment.SetupRolePolicyAttachment,
+		function.SetupFunction,
+		vpcendpoint.SetupVPCEndpoint,
+		vpcendpointserviceconfiguration.SetupVPCEndpointServiceConfiguration,
 	} {
 		if err := setup(mgr, l, rl, poll); err != nil {
 			return err
