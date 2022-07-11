@@ -30,6 +30,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
 	"github.com/crossplane/provider-aws/pkg/controller/config"
+	"github.com/crossplane/provider-aws/pkg/controller/ec2/securitygroup"
 	"github.com/crossplane/provider-aws/pkg/controller/ec2/vpc"
 	"github.com/crossplane/provider-aws/pkg/controller/ec2/vpcendpoint"
 	"github.com/crossplane/provider-aws/pkg/controller/ec2/vpcendpointserviceconfiguration"
@@ -67,6 +68,7 @@ func Setup(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll ti
 		function.SetupFunction,
 		vpcendpoint.SetupVPCEndpoint,
 		vpcendpointserviceconfiguration.SetupVPCEndpointServiceConfiguration,
+		securitygroup.SetupSecurityGroup,
 	} {
 		if err := setup(mgr, l, rl, poll); err != nil {
 			return err
