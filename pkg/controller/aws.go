@@ -30,7 +30,12 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
 	"github.com/crossplane/provider-aws/pkg/controller/config"
+	"github.com/crossplane/provider-aws/pkg/controller/ec2/address"
+	"github.com/crossplane/provider-aws/pkg/controller/ec2/internetgateway"
+	"github.com/crossplane/provider-aws/pkg/controller/ec2/natgateway"
+	"github.com/crossplane/provider-aws/pkg/controller/ec2/routetable"
 	"github.com/crossplane/provider-aws/pkg/controller/ec2/securitygroup"
+	"github.com/crossplane/provider-aws/pkg/controller/ec2/subnet"
 	"github.com/crossplane/provider-aws/pkg/controller/ec2/vpc"
 	"github.com/crossplane/provider-aws/pkg/controller/ec2/vpcendpoint"
 	"github.com/crossplane/provider-aws/pkg/controller/ec2/vpcendpointserviceconfiguration"
@@ -69,6 +74,11 @@ func Setup(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll ti
 		vpcendpoint.SetupVPCEndpoint,
 		vpcendpointserviceconfiguration.SetupVPCEndpointServiceConfiguration,
 		securitygroup.SetupSecurityGroup,
+		subnet.SetupSubnet,
+		internetgateway.SetupInternetGateway,
+		natgateway.SetupNatGateway,
+		routetable.SetupRouteTable,
+		address.SetupAddress,
 	} {
 		if err := setup(mgr, l, rl, poll); err != nil {
 			return err
