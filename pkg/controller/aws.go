@@ -19,9 +19,6 @@ package controller
 import (
 	"time"
 
-	"github.com/crossplane/provider-aws/pkg/controller/iam/policy"
-	"github.com/crossplane/provider-aws/pkg/controller/iam/role"
-	"github.com/crossplane/provider-aws/pkg/controller/iam/rolepolicyattachment"
 	"github.com/crossplane/provider-aws/pkg/controller/vpcpeering"
 
 	"k8s.io/client-go/util/workqueue"
@@ -30,63 +27,12 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
 	"github.com/crossplane/provider-aws/pkg/controller/config"
-	"github.com/crossplane/provider-aws/pkg/controller/ec2/address"
-	"github.com/crossplane/provider-aws/pkg/controller/ec2/internetgateway"
-	"github.com/crossplane/provider-aws/pkg/controller/ec2/natgateway"
-	"github.com/crossplane/provider-aws/pkg/controller/ec2/routetable"
-	"github.com/crossplane/provider-aws/pkg/controller/ec2/securitygroup"
-	"github.com/crossplane/provider-aws/pkg/controller/ec2/subnet"
-	"github.com/crossplane/provider-aws/pkg/controller/ec2/vpc"
-	"github.com/crossplane/provider-aws/pkg/controller/ec2/vpcendpoint"
-	"github.com/crossplane/provider-aws/pkg/controller/ec2/vpcendpointserviceconfiguration"
-	"github.com/crossplane/provider-aws/pkg/controller/eks"
-	"github.com/crossplane/provider-aws/pkg/controller/eks/nodegroup"
-	"github.com/crossplane/provider-aws/pkg/controller/elasticloadbalancing/elb"
-	"github.com/crossplane/provider-aws/pkg/controller/elasticloadbalancing/elbattachment"
-	"github.com/crossplane/provider-aws/pkg/controller/kms/key"
-	"github.com/crossplane/provider-aws/pkg/controller/lambda/function"
-	"github.com/crossplane/provider-aws/pkg/controller/route53/hostedzone"
-	"github.com/crossplane/provider-aws/pkg/controller/route53/resourcerecordset"
-	"github.com/crossplane/provider-aws/pkg/controller/s3"
-	"github.com/crossplane/provider-aws/pkg/controller/s3/bucketpolicy"
-	"github.com/crossplane/provider-aws/pkg/controller/sqs/queue"
 )
 
 // Setup creates all AWS controllers with the supplied logger and adds them to
 // the supplied manager.
 func Setup(mgr ctrl.Manager, l logging.Logger, rl workqueue.RateLimiter, poll time.Duration) error {
-	for _, setup := range []func(ctrl.Manager, logging.Logger, workqueue.RateLimiter, time.Duration) error{
-		elb.SetupELB,
-		elbattachment.SetupELBAttachment,
-		s3.SetupBucket,
-		bucketpolicy.SetupBucketPolicy,
-		vpc.SetupVPC,
-		resourcerecordset.SetupResourceRecordSet,
-		hostedzone.SetupHostedZone,
-		queue.SetupQueue,
-		key.SetupKey,
-		eks.SetupCluster,
-		nodegroup.SetupNodeGroup,
-		policy.SetupPolicy,
-		role.SetupRole,
-		rolepolicyattachment.SetupRolePolicyAttachment,
-		function.SetupFunction,
-		vpcendpoint.SetupVPCEndpoint,
-		vpcendpointserviceconfiguration.SetupVPCEndpointServiceConfiguration,
-		securitygroup.SetupSecurityGroup,
-		subnet.SetupSubnet,
-		internetgateway.SetupInternetGateway,
-		natgateway.SetupNatGateway,
-		routetable.SetupRouteTable,
-		address.SetupAddress,
-	} {
-		if err := setup(mgr, l, rl, poll); err != nil {
-			return err
-		}
-	}
-
 	for _, setup := range []func(ctrl.Manager, logging.Logger, workqueue.RateLimiter) error{
-		config.Setup,
 		vpcpeering.SetupVPCPeeringConnection,
 	} {
 		if err := setup(mgr, l, rl); err != nil {
