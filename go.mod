@@ -33,6 +33,7 @@ require (
 	github.com/mitchellh/copystructure v1.0.0
 	github.com/onsi/gomega v1.17.0
 	github.com/pkg/errors v0.9.1
+	golang.org/x/sys v0.0.0-20220804214406-8e32c043e418 // indirect
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	k8s.io/api v0.23.0
 	k8s.io/apimachinery v0.23.0
