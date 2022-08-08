@@ -1,4 +1,4 @@
-module github.com/crossplane/provider-aws/apis/vpcpeering/v1alpha1
+module github.com/tidbcloud/provider-aws/apis/vpcpeering/v1alpha1
 
 go 1.16
 
