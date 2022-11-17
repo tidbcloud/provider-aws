@@ -1,9 +1,9 @@
-module github.com/crossplane/provider-aws/apis/vpcpeering/v1alpha1
+module github.com/tidbcloud/provider-aws/apis/vpcpeering/v1alpha1
 
 go 1.16
 
 require (
-	github.com/crossplane/crossplane-runtime v0.15.1-0.20210930095326-d5661210733b
-	k8s.io/apimachinery v0.21.3
-	sigs.k8s.io/controller-runtime v0.9.6
+	github.com/crossplane/crossplane-runtime v0.15.1-0.20220315141414-988c9ba9c255
+	k8s.io/apimachinery v0.23.0
+	sigs.k8s.io/controller-runtime v0.11.0
 )

@@ -64,7 +64,6 @@ func main() {
 	kingpin.FatalIfError(err, "Cannot create controller manager")
 
 	kingpin.FatalIfError(apis.AddToScheme(mgr.GetScheme()), "Cannot add AWS APIs to scheme")
-	kingpin.FatalIfError(controller.Setup(mgr, log, ratelimiter.NewGlobal(ratelimiter.DefaultGlobalRPS), *pollInterval), "Cannot setup AWS controllers")
+	kingpin.FatalIfError(controller.Setup(mgr, log, ratelimiter.NewGlobal(10), *pollInterval), "Cannot setup AWS controllers")
 	kingpin.FatalIfError(mgr.Start(ctrl.SetupSignalHandler()), "Cannot start controller manager")
-
 }
