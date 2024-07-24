@@ -9,12 +9,12 @@ on:
     tags:
       - "*"
   # Uncomment below lines to debug this action in PR
-#  pull_request:
-#    branches:
-#      - pingcap/provider-aws
+  pull_request:
+    branches:
+     - pingcap/provider-aws
 
 env:
-  GO_VERSION: '1.14'
+  GO_VERSION: '1.21'
   GCR_REG: gcr.io/pingcap-public/crossplane
   PROJECT_ID: pingcap-public
   IMAGE_NAME: provider-aws
@@ -23,12 +23,12 @@ env:
 
 jobs:
   push-the-image:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       
       - name: Setup Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: ${{ env.GO_VERSION }}
 
@@ -55,12 +55,12 @@ jobs:
         run: CGO_ENABLED=0 GOOS=linux go build -o docker/crossplane-aws-provider cmd/provider/main.go
       
       - id: auth
-        uses: google-github-actions/auth@v0.4.0
+        uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.PUB_GCR_SA_KEY }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v0.3.0
+        uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
 
