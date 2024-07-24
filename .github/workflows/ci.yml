@@ -9,12 +9,12 @@ on:
     tags:
       - "*"
   # Uncomment below lines to debug this action in PR
-#  pull_request:
-#    branches:
-#      - pingcap/provider-aws
+  # pull_request:
+  #   branches:
+  #    - pingcap/provider-aws
 
 env:
-  GO_VERSION: '1.14'
+  GO_VERSION: '1.21'
   GCR_REG: gcr.io/pingcap-public/crossplane
   PROJECT_ID: pingcap-public
   IMAGE_NAME: provider-aws
@@ -23,28 +23,28 @@ env:
 
 jobs:
   push-the-image:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       
       - name: Setup Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Find the Go Build Cache
         id: go
-        run: echo "::set-output name=cache::$(make go.cachedir)"
+        run: echo "cache=$(make go.cachedir)" >> $GITHUB_OUTPUT
 
       - name: Cache the Go Build Cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: ${{ steps.go.outputs.cache }}
           key: ${{ runner.os }}-build-publish-artifacts-${{ hashFiles('**/go.sum') }}
           restore-keys: ${{ runner.os }}-build-publish-artifacts-
 
       - name: Cache Go Dependencies
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: .work/pkg
           key: ${{ runner.os }}-pkg-${{ hashFiles('**/go.sum') }}
@@ -55,21 +55,21 @@ jobs:
         run: CGO_ENABLED=0 GOOS=linux go build -o docker/crossplane-aws-provider cmd/provider/main.go
       
       - id: auth
-        uses: google-github-actions/auth@v0.4.0
+        uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.PUB_GCR_SA_KEY }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v0.3.0
+        uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
 
       - name: Test gcloud CLI
-        run: gcloud info
+        run: gcloud auth list
 
       - name: Configure docker to use the gcloud command-line tool as a credential helper
         run: |
-          gcloud auth configure-docker -q
+          gcloud auth configure-docker gcr.io --quiet
 
       - name: Get tag name if any
         uses: olegtarasov/get-tag@v2.1
