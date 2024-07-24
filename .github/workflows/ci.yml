@@ -65,7 +65,7 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
 
       - name: Test gcloud CLI
-        run: gcloud info
+        run: gcloud auth list
 
       - name: Configure docker to use the gcloud command-line tool as a credential helper
         run: |
