@@ -248,7 +248,10 @@ func lateInitialize(in *svcapitypes.AutoScalingGroupParameters, asg *svcsdk.Desc
 	in.CapacityRebalance = pointer.LateInitialize(in.CapacityRebalance, obs.CapacityRebalance)
 	in.DefaultCooldown = pointer.LateInitialize(in.DefaultCooldown, obs.DefaultCooldown)
 	in.DefaultInstanceWarmup = pointer.LateInitialize(in.DefaultInstanceWarmup, obs.DefaultInstanceWarmup)
-	in.DesiredCapacity = pointer.LateInitialize(in.DesiredCapacity, obs.DesiredCapacity)
+	// Do not auto init DesiredCapacity, it may be controlled by external component such as the autoscaler
+	if in.DesiredCapacity != nil {
+		in.DesiredCapacity = pointer.LateInitialize(in.DesiredCapacity, obs.DesiredCapacity)
+	}
 	in.DesiredCapacityType = pointer.LateInitialize(in.DesiredCapacityType, obs.DesiredCapacityType)
 	in.HealthCheckGracePeriod = pointer.LateInitialize(in.HealthCheckGracePeriod, obs.HealthCheckGracePeriod)
 	in.HealthCheckType = pointer.LateInitialize(in.HealthCheckType, obs.HealthCheckType)
