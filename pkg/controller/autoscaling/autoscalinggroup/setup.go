@@ -93,9 +93,11 @@ func isUpToDate(_ context.Context, obj *svcapitypes.AutoScalingGroup, obs *svcsd
 	if !cmp.Equal(in.DefaultCooldown, asg.DefaultCooldown) {
 		return false, "spec.forProvider.defaultCooldown", nil
 	}
-	// DesiredCapacity can be updated
-	if !cmp.Equal(in.DesiredCapacity, asg.DesiredCapacity) {
-		return false, "spec.forProvider.desiredCapacity", nil
+	// if DesiredCapacity is unset, skip checking the diff
+	if in.DesiredCapacity != nil {
+		if !cmp.Equal(in.DesiredCapacity, asg.DesiredCapacity) {
+			return false, "spec.forProvider.desiredCapacity", nil
+		}
 	}
 	// HealthCheckGracePeriod can be updated
 	if !cmp.Equal(in.HealthCheckGracePeriod, asg.HealthCheckGracePeriod) {
