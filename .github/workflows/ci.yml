@@ -9,9 +9,9 @@ on:
     tags:
       - "*"
   # Uncomment below lines to debug this action in PR
-  # pull_request:
-  #   branches:
-  #    - pingcap/provider-aws
+  pull_request:
+    branches:
+      - forked/release-0.47
 
 env:
   GO_VERSION: '1.21'
