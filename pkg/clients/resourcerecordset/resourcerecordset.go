@@ -192,11 +192,17 @@ func CreatePatch(in *route53types.ResourceRecordSet, target *v1alpha1.ResourceRe
 	currentParams := &v1alpha1.ResourceRecordSetParameters{}
 	LateInitialize(currentParams, in)
 
+	expected := target.DeepCopy()
+
 	// ZoneID doesn't exist in *route53types.ResourceRecordSet object, so, we have to
 	// skip its comparison.
-	currentParams.ZoneID = target.ZoneID
+	currentParams.ZoneID = expected.ZoneID
 
-	jsonPatch, err := jsonpatch.CreateJSONPatch(currentParams, target)
+	if expected.AliasTarget != nil && expected.AliasTarget.DNSName != "" {
+		expected.AliasTarget.DNSName = appendDot(expected.AliasTarget.DNSName)
+	}
+
+	jsonPatch, err := jsonpatch.CreateJSONPatch(currentParams, expected)
 	if err != nil {
 		return nil, err
 	}
@@ -206,4 +212,11 @@ func CreatePatch(in *route53types.ResourceRecordSet, target *v1alpha1.ResourceRe
 		return nil, err
 	}
 	return patch, nil
+}
+
+func appendDot(s string) string {
+	if !strings.HasSuffix(s, ".") {
+		return fmt.Sprintf("%s.", s)
+	}
+	return s
 }
