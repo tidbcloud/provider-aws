@@ -3,7 +3,6 @@ package iam
 import (
 	"context"
 	"encoding/json"
-	"net/url"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -18,6 +17,7 @@ import (
 	"github.com/crossplane-contrib/provider-aws/pkg/clients/iam/convert"
 	"github.com/crossplane-contrib/provider-aws/pkg/utils/jsonpatch"
 	"github.com/crossplane-contrib/provider-aws/pkg/utils/pointer"
+	"github.com/crossplane-contrib/provider-aws/pkg/utils/policy"
 	legacypolicy "github.com/crossplane-contrib/provider-aws/pkg/utils/policy/old"
 )
 
@@ -158,22 +158,12 @@ func CreatePatch(in *iamtypes.Role, target *v1beta1.RoleParameters) (*v1beta1.Ro
 	return patch, nil
 }
 
-func isAssumeRolePolicyUpToDate(a, b *string) (bool, error) {
+func isAssumeRolePolicyUpToDate(a, b *string) (bool, string, error) {
 	if a == nil || b == nil {
-		return a == b, nil
+		return a == b, cmp.Diff(a, b), nil
 	}
 
-	jsonA, err := url.QueryUnescape(*a)
-	if err != nil {
-		return false, errors.Wrap(err, errPolicyJSONUnescape)
-	}
-
-	jsonB, err := url.QueryUnescape(*b)
-	if err != nil {
-		return false, errors.Wrap(err, errPolicyJSONUnescape)
-	}
-
-	return legacypolicy.IsPolicyUpToDate(&jsonA, &jsonB), nil
+	return policy.IsPolicyDocumentUpToDate(*a, *b)
 }
 
 // IsRoleUpToDate checks whether there is a change in any of the modifiable fields in role.
@@ -183,7 +173,7 @@ func IsRoleUpToDate(in v1beta1.RoleParameters, observed iamtypes.Role) (bool, st
 		return false, "", err
 	}
 
-	policyUpToDate, err := isAssumeRolePolicyUpToDate(desired.AssumeRolePolicyDocument, observed.AssumeRolePolicyDocument)
+	policyUpToDate, policyDiff, err := isAssumeRolePolicyUpToDate(desired.AssumeRolePolicyDocument, observed.AssumeRolePolicyDocument)
 	if err != nil {
 		return false, "", err
 	}
@@ -200,10 +190,7 @@ func IsRoleUpToDate(in v1beta1.RoleParameters, observed iamtypes.Role) (bool, st
 
 	// Add extra logging for AssumeRolePolicyDocument because cmp.Diff doesn't show the full difference
 	if !policyUpToDate {
-		diff += "\ndesired assume role policy: "
-		diff += *desired.AssumeRolePolicyDocument
-		diff += "\nobserved assume role policy: "
-		diff += *observed.AssumeRolePolicyDocument
+		diff += "AssumeRolePolicyDocument diff\n" + policyDiff
 	}
 	return false, diff, nil
 }
