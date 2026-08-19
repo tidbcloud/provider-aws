@@ -18,8 +18,10 @@ package openidconnectprovider
 
 import (
 	"context"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	awsarn "github.com/aws/aws-sdk-go-v2/aws/arn"
 	awsiam "github.com/aws/aws-sdk-go-v2/service/iam"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
@@ -125,7 +127,7 @@ func (e *external) Observe(ctx context.Context, mgd resource.Managed) (managed.E
 	}
 
 	if meta.GetExternalName(cr) == "" {
-		arn, err := e.getOpenIDConnectProviderByTags(ctx, resource.GetExternalTags(mgd))
+		arn, err := e.getOpenIDConnectProviderByTags(ctx, cr.Spec.ForProvider.URL, resource.GetExternalTags(mgd))
 		if arn == nil || err != nil {
 			return managed.ExternalObservation{}, resource.Ignore(iam.IsErrorNotFound, err)
 		}
@@ -267,29 +269,63 @@ func (e *external) Delete(ctx context.Context, mgd resource.Managed) error {
 	return errorutils.Wrap(resource.Ignore(iam.IsErrorNotFound, err), errDelete)
 }
 
-func (e *external) getOpenIDConnectProviderByTags(ctx context.Context, tags map[string]string) (*string, error) {
+func oidcARNMatchesURL(providerARN, providerURL string) bool {
+	issuer, ok := strings.CutPrefix(providerURL, "https://")
+	if !ok || issuer == "" {
+		return false
+	}
+
+	parsed, err := awsarn.Parse(providerARN)
+	if err != nil {
+		return false
+	}
+
+	return parsed.Service == "iam" &&
+		parsed.Region == "" &&
+		parsed.Resource == "oidc-provider/"+issuer
+}
+
+func findOIDCProviderARNByURL(providers []iamtypes.OpenIDConnectProviderListEntry, providerURL string) *string {
+	for _, provider := range providers {
+		if oidcARNMatchesURL(aws.ToString(provider.Arn), providerURL) {
+			return provider.Arn
+		}
+	}
+	return nil
+}
+
+func (e *external) getOpenIDConnectProviderByTags(ctx context.Context, providerURL string, tags map[string]string) (*string, error) {
 	name, ok := tags[resource.ExternalResourceTagKeyName]
 	if !ok {
 		return nil, nil
 	}
 
 	oidcs, err := e.client.ListOpenIDConnectProviders(ctx, &awsiam.ListOpenIDConnectProvidersInput{})
-	if err != nil || len(oidcs.OpenIDConnectProviderList) == 0 {
+	if err != nil {
 		return nil, errorutils.Wrap(err, errList)
 	}
+	if oidcs == nil {
+		return nil, errors.New(errList)
+	}
 
-	for _, o := range oidcs.OpenIDConnectProviderList {
-		tags, err := e.client.ListOpenIDConnectProviderTags(ctx, &awsiam.ListOpenIDConnectProviderTagsInput{
-			OpenIDConnectProviderArn: o.Arn,
-		})
-		if err != nil {
-			return nil, errorutils.Wrap(err, errListTags)
-		}
+	providerARN := findOIDCProviderARNByURL(oidcs.OpenIDConnectProviderList, providerURL)
+	if providerARN == nil {
+		return nil, nil
+	}
 
-		for _, t := range tags.Tags {
-			if *t.Key == resource.ExternalResourceTagKeyName && *t.Value == name {
-				return o.Arn, nil
-			}
+	observedTags, err := e.client.ListOpenIDConnectProviderTags(ctx, &awsiam.ListOpenIDConnectProviderTagsInput{
+		OpenIDConnectProviderArn: providerARN,
+	})
+	if err != nil {
+		return nil, errorutils.Wrap(err, errListTags)
+	}
+	if observedTags == nil {
+		return nil, errors.New(errListTags)
+	}
+
+	for _, t := range observedTags.Tags {
+		if aws.ToString(t.Key) == resource.ExternalResourceTagKeyName && aws.ToString(t.Value) == name {
+			return providerARN, nil
 		}
 	}
 	return nil, nil

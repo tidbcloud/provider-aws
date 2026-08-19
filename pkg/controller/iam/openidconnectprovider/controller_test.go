@@ -18,6 +18,7 @@ package openidconnectprovider
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -42,7 +43,7 @@ import (
 
 var (
 	unexpectedItem resource.Managed
-	providerArn    = "arn:123"
+	providerArn    = "arn:aws:iam::123456789012:oidc-provider/example.com"
 	url            = "https://example.com"
 	name           = "oidcProvider"
 
@@ -144,6 +145,14 @@ func oidcProvider(m ...oidcProviderModifier) *svcapitypes.OpenIDConnectProvider 
 		f(cr)
 	}
 	return cr
+}
+
+func oidcProviderList(n int) []iamtypes.OpenIDConnectProviderListEntry {
+	providers := make([]iamtypes.OpenIDConnectProviderListEntry, n)
+	for i := range providers {
+		providers[i].Arn = aws.String(fmt.Sprintf("arn:aws:iam::123456789012:oidc-provider/unrelated-%03d.example.com", i))
+	}
+	return providers
 }
 
 func TestObserve(t *testing.T) {
@@ -319,6 +328,343 @@ func TestObserve(t *testing.T) {
 			}
 			if diff := cmp.Diff(tc.want.result, o); diff != "" {
 				t.Errorf("r: -want, +got:\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestOIDCARNMatchesURL(t *testing.T) {
+	cases := map[string]struct {
+		providerARN string
+		providerURL string
+		want        bool
+	}{
+		"CommercialPartition": {
+			providerARN: providerArn,
+			providerURL: url,
+			want:        true,
+		},
+		"GKEPath": {
+			providerARN: "arn:aws:iam::123456789012:oidc-provider/container.googleapis.com/v1/projects/project/locations/us-central1/clusters/cluster",
+			providerURL: "https://container.googleapis.com/v1/projects/project/locations/us-central1/clusters/cluster",
+			want:        true,
+		},
+		"EKSPathWithTrailingSlash": {
+			providerARN: "arn:aws:iam::123456789012:oidc-provider/oidc.eks.us-west-2.amazonaws.com/id/issuer/",
+			providerURL: "https://oidc.eks.us-west-2.amazonaws.com/id/issuer/",
+			want:        true,
+		},
+		"ChinaPartition": {
+			providerARN: "arn:aws-cn:iam::123456789012:oidc-provider/example.com/path",
+			providerURL: "https://example.com/path",
+			want:        true,
+		},
+		"GovCloudPartition": {
+			providerARN: "arn:aws-us-gov:iam::123456789012:oidc-provider/example.com/path",
+			providerURL: "https://example.com/path",
+			want:        true,
+		},
+		"DifferentPath": {
+			providerARN: "arn:aws:iam::123456789012:oidc-provider/example.com/path-a",
+			providerURL: "https://example.com/path-b",
+		},
+		"PathPrefixOnly": {
+			providerARN: "arn:aws:iam::123456789012:oidc-provider/example.com/clusters/cluster-extra",
+			providerURL: "https://example.com/clusters/cluster",
+		},
+		"CaseMismatch": {
+			providerARN: "arn:aws:iam::123456789012:oidc-provider/Example.com/Path",
+			providerURL: "https://example.com/Path",
+		},
+		"TrailingSlashMismatch": {
+			providerARN: "arn:aws:iam::123456789012:oidc-provider/example.com/path/",
+			providerURL: "https://example.com/path",
+		},
+		"PercentEscapeLiteralMatch": {
+			providerARN: "arn:aws:iam::123456789012:oidc-provider/example.com/a%2Fb",
+			providerURL: "https://example.com/a%2Fb",
+			want:        true,
+		},
+		"PercentEscapeCaseMismatch": {
+			providerARN: "arn:aws:iam::123456789012:oidc-provider/example.com/a%2Fb",
+			providerURL: "https://example.com/a%2fb",
+		},
+		"PortLiteralMatch": {
+			providerARN: "arn:aws:iam::123456789012:oidc-provider/example.com:8443/path",
+			providerURL: "https://example.com:8443/path",
+			want:        true,
+		},
+		"WrongService": {
+			providerARN: "arn:aws:sts::123456789012:oidc-provider/example.com",
+			providerURL: url,
+		},
+		"RegionalIAMARN": {
+			providerARN: "arn:aws:iam:us-east-1:123456789012:oidc-provider/example.com",
+			providerURL: url,
+		},
+		"WrongResourceType": {
+			providerARN: "arn:aws:iam::123456789012:role/example.com",
+			providerURL: url,
+		},
+		"MalformedARN": {
+			providerARN: "arn:123",
+			providerURL: url,
+		},
+		"EmptyARN": {
+			providerURL: url,
+		},
+		"HTTPURL": {
+			providerARN: providerArn,
+			providerURL: "http://example.com",
+		},
+		"EmptyURL": {
+			providerARN: providerArn,
+		},
+		"EmptyIssuer": {
+			providerARN: "arn:aws:iam::123456789012:oidc-provider/",
+			providerURL: "https://",
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := oidcARNMatchesURL(tc.providerARN, tc.providerURL); got != tc.want {
+				t.Errorf("oidcARNMatchesURL(%q, %q) = %t, want %t", tc.providerARN, tc.providerURL, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGetOpenIDConnectProviderByTagsFiltersByURL(t *testing.T) {
+	matchingProviders := oidcProviderList(164)
+	matchingProviders[len(matchingProviders)-1].Arn = aws.String(providerArn)
+	correctOwnershipTag := &awsiam.ListOpenIDConnectProviderTagsOutput{Tags: []iamtypes.Tag{{
+		Key:   aws.String(resource.ExternalResourceTagKeyName),
+		Value: aws.String(name),
+	}}}
+
+	type want struct {
+		arn       *string
+		err       error
+		listCalls int
+		tagCalls  int
+		tagARN    string
+	}
+	cases := map[string]struct {
+		providerURL  string
+		externalTags map[string]string
+		listOutput   *awsiam.ListOpenIDConnectProvidersOutput
+		listErr      error
+		tagOutput    *awsiam.ListOpenIDConnectProviderTagsOutput
+		tagsByARN    map[string]*awsiam.ListOpenIDConnectProviderTagsOutput
+		tagErr       error
+		want
+	}{
+		"NoExpectedNameTag": {
+			providerURL: url,
+			listOutput: &awsiam.ListOpenIDConnectProvidersOutput{
+				OpenIDConnectProviderList: []iamtypes.OpenIDConnectProviderListEntry{{Arn: aws.String(providerArn)}},
+			},
+		},
+		"NoMatchingURLAmong164Providers": {
+			providerURL:  url,
+			externalTags: map[string]string{resource.ExternalResourceTagKeyName: name},
+			listOutput: &awsiam.ListOpenIDConnectProvidersOutput{
+				OpenIDConnectProviderList: oidcProviderList(164),
+			},
+			tagOutput: &awsiam.ListOpenIDConnectProviderTagsOutput{},
+			want: want{
+				listCalls: 1,
+			},
+		},
+		"MatchingURLIsLastAmong164Providers": {
+			providerURL:  url,
+			externalTags: map[string]string{resource.ExternalResourceTagKeyName: name},
+			listOutput: &awsiam.ListOpenIDConnectProvidersOutput{
+				OpenIDConnectProviderList: matchingProviders,
+			},
+			tagOutput: &awsiam.ListOpenIDConnectProviderTagsOutput{},
+			tagsByARN: map[string]*awsiam.ListOpenIDConnectProviderTagsOutput{
+				providerArn: correctOwnershipTag,
+			},
+			want: want{
+				arn:       aws.String(providerArn),
+				listCalls: 1,
+				tagCalls:  1,
+				tagARN:    providerArn,
+			},
+		},
+		"MatchingURLWrongOwnershipTag": {
+			providerURL:  url,
+			externalTags: map[string]string{resource.ExternalResourceTagKeyName: name},
+			listOutput: &awsiam.ListOpenIDConnectProvidersOutput{
+				OpenIDConnectProviderList: []iamtypes.OpenIDConnectProviderListEntry{{Arn: aws.String(providerArn)}},
+			},
+			tagOutput: &awsiam.ListOpenIDConnectProviderTagsOutput{Tags: []iamtypes.Tag{{
+				Key:   aws.String(resource.ExternalResourceTagKeyName),
+				Value: aws.String("different-name"),
+			}}},
+			want: want{
+				listCalls: 1,
+				tagCalls:  1,
+				tagARN:    providerArn,
+			},
+		},
+		"MatchingURLMissingOwnershipTag": {
+			providerURL:  url,
+			externalTags: map[string]string{resource.ExternalResourceTagKeyName: name},
+			listOutput: &awsiam.ListOpenIDConnectProvidersOutput{
+				OpenIDConnectProviderList: []iamtypes.OpenIDConnectProviderListEntry{{Arn: aws.String(providerArn)}},
+			},
+			tagOutput: &awsiam.ListOpenIDConnectProviderTagsOutput{},
+			want: want{
+				listCalls: 1,
+				tagCalls:  1,
+				tagARN:    providerArn,
+			},
+		},
+		"NilTagFieldsDoNotMatch": {
+			providerURL:  url,
+			externalTags: map[string]string{resource.ExternalResourceTagKeyName: name},
+			listOutput: &awsiam.ListOpenIDConnectProvidersOutput{
+				OpenIDConnectProviderList: []iamtypes.OpenIDConnectProviderListEntry{{Arn: aws.String(providerArn)}},
+			},
+			tagOutput: &awsiam.ListOpenIDConnectProviderTagsOutput{Tags: []iamtypes.Tag{
+				{Value: aws.String(name)},
+				{Key: aws.String(resource.ExternalResourceTagKeyName)},
+			}},
+			want: want{
+				listCalls: 1,
+				tagCalls:  1,
+				tagARN:    providerArn,
+			},
+		},
+		"DifferentURLWithSameNameTagIsNotAdopted": {
+			providerURL:  url,
+			externalTags: map[string]string{resource.ExternalResourceTagKeyName: name},
+			listOutput: &awsiam.ListOpenIDConnectProvidersOutput{
+				OpenIDConnectProviderList: []iamtypes.OpenIDConnectProviderListEntry{{
+					Arn: aws.String("arn:aws:iam::123456789012:oidc-provider/different.example.com"),
+				}},
+			},
+			tagOutput: correctOwnershipTag,
+			want: want{
+				listCalls: 1,
+			},
+		},
+		"MalformedAndNilARNsAreSkipped": {
+			providerURL:  url,
+			externalTags: map[string]string{resource.ExternalResourceTagKeyName: name},
+			listOutput: &awsiam.ListOpenIDConnectProvidersOutput{
+				OpenIDConnectProviderList: []iamtypes.OpenIDConnectProviderListEntry{
+					{},
+					{Arn: aws.String("arn:123")},
+					{Arn: aws.String("arn:aws:iam::123456789012:role/example.com")},
+				},
+			},
+			tagOutput: correctOwnershipTag,
+			want: want{
+				listCalls: 1,
+			},
+		},
+		"DuplicateMatchingARNIsCheckedOnce": {
+			providerURL:  url,
+			externalTags: map[string]string{resource.ExternalResourceTagKeyName: name},
+			listOutput: &awsiam.ListOpenIDConnectProvidersOutput{
+				OpenIDConnectProviderList: []iamtypes.OpenIDConnectProviderListEntry{
+					{Arn: aws.String(providerArn)},
+					{Arn: aws.String(providerArn)},
+				},
+			},
+			tagOutput: correctOwnershipTag,
+			want: want{
+				arn:       aws.String(providerArn),
+				listCalls: 1,
+				tagCalls:  1,
+				tagARN:    providerArn,
+			},
+		},
+		"ListError": {
+			providerURL:  url,
+			externalTags: map[string]string{resource.ExternalResourceTagKeyName: name},
+			listErr:      errBoom,
+			want: want{
+				err:       errorutils.Wrap(errBoom, errList),
+				listCalls: 1,
+			},
+		},
+		"NilListOutput": {
+			providerURL:  url,
+			externalTags: map[string]string{resource.ExternalResourceTagKeyName: name},
+			want: want{
+				err:       errors.New(errList),
+				listCalls: 1,
+			},
+		},
+		"MatchingURLTagError": {
+			providerURL:  url,
+			externalTags: map[string]string{resource.ExternalResourceTagKeyName: name},
+			listOutput: &awsiam.ListOpenIDConnectProvidersOutput{
+				OpenIDConnectProviderList: []iamtypes.OpenIDConnectProviderListEntry{{Arn: aws.String(providerArn)}},
+			},
+			tagErr: errBoom,
+			want: want{
+				err:       errorutils.Wrap(errBoom, errListTags),
+				listCalls: 1,
+				tagCalls:  1,
+				tagARN:    providerArn,
+			},
+		},
+		"MatchingURLNilTagOutput": {
+			providerURL:  url,
+			externalTags: map[string]string{resource.ExternalResourceTagKeyName: name},
+			listOutput: &awsiam.ListOpenIDConnectProvidersOutput{
+				OpenIDConnectProviderList: []iamtypes.OpenIDConnectProviderListEntry{{Arn: aws.String(providerArn)}},
+			},
+			want: want{
+				err:       errors.New(errListTags),
+				listCalls: 1,
+				tagCalls:  1,
+				tagARN:    providerArn,
+			},
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			listCalls := 0
+			tagCalls := 0
+			client := &fake.MockOpenIDConnectProviderClient{
+				MockListOpenIDConnectProviders: func(ctx context.Context, input *awsiam.ListOpenIDConnectProvidersInput, opts []func(*awsiam.Options)) (*awsiam.ListOpenIDConnectProvidersOutput, error) {
+					listCalls++
+					return tc.listOutput, tc.listErr
+				},
+				MockListOpenIDConnectProviderTags: func(ctx context.Context, input *awsiam.ListOpenIDConnectProviderTagsInput, opts []func(*awsiam.Options)) (*awsiam.ListOpenIDConnectProviderTagsOutput, error) {
+					tagCalls++
+					if tc.want.tagARN != "" && aws.ToString(input.OpenIDConnectProviderArn) != tc.want.tagARN {
+						t.Errorf("ListOpenIDConnectProviderTags ARN = %q, want %q", aws.ToString(input.OpenIDConnectProviderArn), tc.want.tagARN)
+					}
+					if output, ok := tc.tagsByARN[aws.ToString(input.OpenIDConnectProviderArn)]; ok {
+						return output, tc.tagErr
+					}
+					return tc.tagOutput, tc.tagErr
+				},
+			}
+
+			e := &external{client: client}
+			got, err := e.getOpenIDConnectProviderByTags(context.Background(), tc.providerURL, tc.externalTags)
+
+			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
+				t.Errorf("error: -want, +got:\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.want.arn, got); diff != "" {
+				t.Errorf("ARN: -want, +got:\n%s", diff)
+			}
+			if listCalls != tc.want.listCalls {
+				t.Errorf("ListOpenIDConnectProviders calls = %d, want %d", listCalls, tc.want.listCalls)
+			}
+			if tagCalls != tc.want.tagCalls {
+				t.Errorf("ListOpenIDConnectProviderTags calls = %d, want %d", tagCalls, tc.want.tagCalls)
 			}
 		})
 	}
